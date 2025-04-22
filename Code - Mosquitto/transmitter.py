@@ -6,71 +6,73 @@ import json
 import ssl
 import os
 
-MQTT_BROKER = "localhost"
-MQTT_PORT = 1883
-USE_TLS = False
-MQTT_USERNAME = ""
-MQTT_PASSWORD = ""
+MQTT_BROKER = "localhost" # Central HUB that connects devices altogether.
+MQTT_PORT = 1883 # Port for MQTT communication.
+USE_TLS = False # Port 8883 is used for secure communication (TLS/SSL).
 
 TOPIC_IMAGE = "pi/photo"
 TOPIC_ACK = "pc/ack"
 
-ack_recu = False
-message_id_en_cours = ""
+ack_recu = False # Variable to know if the feedback has been received.
+current_message_id = "" # Variable to store the ID of the current message.
 
-def on_message(client, userdata, msg):
+def on_message(client, userdata, msg): # Callback function to handle incoming feedback from the receiver.
     global ack_recu
     ack = json.loads(msg.payload.decode('utf-8'))
-    if ack.get("id") == message_id_en_cours:
-        ack_recu = True
-        print(f"[SIMULATEUR] Accusé de réception : {ack.get('status')}")
 
+    if ack.get("id") == current_message_id:
+        ack_recu = True
+        print(f"[TRANSMITTER] Confirmation of receipt : {ack.get('status')}")
+
+#Create a new MQTT client instance and set the connection.
 client = mqtt.Client()
 client.on_message = on_message
-
-if USE_TLS:
-    client.tls_set(cert_reqs=ssl.CERT_NONE)
-    client.tls_insecure_set(True)
-
-if MQTT_USERNAME:
-    client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
 
 client.connect(MQTT_BROKER, MQTT_PORT, 60)
 client.subscribe(TOPIC_ACK)
 client.loop_start()
 
-# === Liste des fichiers à envoyer
-fichiers = ["files_to_send/wordfile.docx", "files_to_send/pdffile.pdf", "files_to_send/scriptfile.py"]
+# List of files to send.
+files =  []
+repository = "files_to_send"
+os.makedirs(repository, exist_ok=True)
 
-for fichier in fichiers:
+files_name = ["wordfile.docx", "pdffile.pdf", "scriptfile.py"] #Names of files to send.
+for file_name in files_name:
+    file = os.path.join(repository, file_name)
+    files.append(file)
+print(files)
+
+# Loop to send each file to the receiver through the topic (TOPIC_IMAGE).
+for file in files:
     ack_recu = False
-    message_id_en_cours = str(uuid.uuid4())
+    current_message_id = str(uuid.uuid4())
 
-    with open(fichier, "rb") as f:
+    with open(file, "rb") as f: # Read the file in binary mode & Encode it in base64.
         contenu_base64 = base64.b64encode(f.read()).decode("utf-8")
 
     payload = {
-        "id": message_id_en_cours,
-        "filename": os.path.basename(fichier),
+        "id": current_message_id,
+        "filename": os.path.basename(file),
         "data": contenu_base64
     }
 
-    max_essais = 3
-    for tentative in range(1, max_essais + 1):
-        print(f"[SIMULATEUR] Envoi de {fichier} - tentative {tentative}")
-        client.publish(TOPIC_IMAGE, json.dumps(payload))
+    max_try = 3
+    for Try in range(1, max_try + 1):
+        print(f"[TRANSMITTER] Transmission of {file} - try n°{Try}")
+        client.publish(TOPIC_IMAGE, json.dumps(payload)) # Send the file to the receiver.
 
         for _ in range(10):  # timeout 5 sec
             if ack_recu:
                 break
             time.sleep(0.5)
 
-        if ack_recu:
-            print(f"[SIMULATEUR] {fichier} → envoyé avec succès ✅")
+        if ack_recu: # If the feedback is received, break the loop and move to the next file.
+            print(f"[TRANSMITTER] {file} was send with success.")
             break
         else:
-            print(f"[SIMULATEUR] Pas d’ACK pour {fichier}, nouvelle tentative...")
+            print(f"[TRANSMITTER] No feedback for {file}, try again")
 
 client.loop_stop()
 client.disconnect()
-print("[SIMULATEUR] Fin du programme.")
+print("[TRANSMITTER] End of transmission.")

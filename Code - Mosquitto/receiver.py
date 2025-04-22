@@ -4,58 +4,55 @@ import json
 import ssl
 import os
 
-MQTT_BROKER = "localhost"
-MQTT_PORT = 1883
-USE_TLS = False
-MQTT_USERNAME = ""
-MQTT_PASSWORD = ""
+MQTT_BROKER = "localhost" #Central HUB that connects devices altogether.
+MQTT_PORT = 1883 # Port for MQTT communication.
+USE_TLS = False # Port 8883 is used for secure communication (TLS/SSL).
 
 TOPIC_IMAGE = "pi/photo"
 TOPIC_ACK = "pc/ack"
 
+#Connection to the MQTT broker and subscription to the main topic (TOPIC_IMAGE).
+# The receiver will listen for incoming messages on the specified topic and process them accordingly.
 def on_connect(client, userdata, flags, rc):
-    print("[RECEPTEUR] Connecté, en attente de messages...")
+    print("[RECEIVER] Connected, waiting for data ...")
     client.subscribe(TOPIC_IMAGE)
 
 def on_message(client, userdata, msg):
     try:
+        ## Get & Decode the incoming message
         data = json.loads(msg.payload.decode("utf-8"))
-        fichier_nom = data.get("filename", f"recu_{data['id']}")
-        contenu = base64.b64decode(data["data"])
+        data_name = data.get("filename", f"recu_{data['id']}")
+        data_content = base64.b64decode(data["data"])
 
-        dossier = "files_received"
-        os.makedirs(dossier, exist_ok=True)
-        chemin = os.path.join(dossier, fichier_nom)
+        repository = "files_received"
+        os.makedirs(repository, exist_ok=True)
+        complete_path = os.path.join(repository, data_name)
 
-        with open(chemin, "wb") as f:
-            f.write(contenu)
+        with open(complete_path, "wb") as f:
+            f.write(data_content)
 
-        print(f"[RECEPTEUR] Fichier reçu et sauvegardé : {chemin}")
+        print(f"[RECEIVER] Data succesfully received and saved here : {complete_path} ✅")
 
+        ## Send feedback back to the sender (receiver.py)
         ack_payload = {
             "id": data["id"],
-            "status": "Réception OK ✅"
+            "status": "Reception OK ✅"
         }
         client.publish(TOPIC_ACK, json.dumps(ack_payload))
 
+    #except json.JSONDecodeError:
     except Exception as e:
-        print("[RECEPTEUR] Erreur :", str(e))
+        print("[RECEIVER] ❌ Error :", str(e))
         if "data" in locals():
             client.publish(TOPIC_ACK, json.dumps({
                 "id": data.get("id"),
-                "status": f"Erreur ❌ : {str(e)}"
+                "status": f"Error ❌ : {str(e)}"
             }))
 
+#Create a new MQTT client instance and set the connection and message handling callbacks.
 client = mqtt.Client()
 client.on_connect = on_connect
 client.on_message = on_message
-
-if USE_TLS:
-    client.tls_set(cert_reqs=ssl.CERT_NONE)
-    client.tls_insecure_set(True)
-
-if MQTT_USERNAME:
-    client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
 
 client.connect(MQTT_BROKER, MQTT_PORT, 60)
 client.loop_forever()
