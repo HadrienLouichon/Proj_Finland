@@ -5,12 +5,12 @@ import uuid
 import json
 import os
 
-MQTT_BROKER = "192.168.151.25" # Put here the IP address of the MQTT broker (device that will receive datas).
+MQTT_BROKER = "test.mosquitto.org" #Online broker for communication with different network connections.
 MQTT_PORT = 1883 # Port for MQTT communication.
 USE_TLS = False # Port 8883 is used for secure communication (TLS/SSL).
 
-TOPIC_IMAGE = "pi/photo"
-TOPIC_ACK = "pc/ack"
+TOPIC_IMAGE = "pi/photo_proj_finland" #Make the name of the topic unique to avoid conflicts with other users.
+TOPIC_ACK = "pc/ack_proj_finland"
 
 ack_recu = False # Variable to know if the feedback has been received.
 current_message_id = "" # Variable to store the ID of the current message.
