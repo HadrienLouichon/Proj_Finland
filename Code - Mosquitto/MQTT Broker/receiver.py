@@ -1,7 +1,6 @@
 import paho.mqtt.client as mqtt
 import base64
 import json
-import ssl
 import os
 
 MQTT_BROKER = "localhost" #Central HUB that connects devices altogether.
