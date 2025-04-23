@@ -3,12 +3,12 @@ import base64
 import json
 import os
 
-MQTT_BROKER = "localhost" #Central HUB that connects devices altogether.
+MQTT_BROKER = "test.mosquitto.org" #Online broker for communication with different network connections.
 MQTT_PORT = 1883 # Port for MQTT communication.
 USE_TLS = False # Port 8883 is used for secure communication (TLS/SSL).
 
-TOPIC_IMAGE = "pi/photo"
-TOPIC_ACK = "pc/ack"
+TOPIC_IMAGE = "pi/photo_proj_finland" #Make the name of the topic unique to avoid conflicts with other users.
+TOPIC_ACK = "pc/ack_proj_finland"
 
 #Connection to the MQTT broker and subscription to the main topic (TOPIC_IMAGE).
 # The receiver will listen for incoming messages on the specified topic and process them accordingly.
