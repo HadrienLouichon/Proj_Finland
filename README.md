@@ -31,6 +31,7 @@ pip install os-sys uuid
 ## Content Table :
 - [Launch a basic local communication](#launch-basic-local-communication-branch-send_multiple_documents)
 - [Launch a basic distant communication](#launch-distant-communication-through-wifi)
+- [Launch a basic communication using different network](#launch-distant-communication-with-different-network-connexions-through-wifi-branch-simple_communication_with_raspberrypi_online_mqtt)
 
 
 ## Launch basic local communication (_branch Send_multiple_documents_)
@@ -117,5 +118,35 @@ Press **Ctrl + C** to stop the receiver program when you have succesfully receiv
     On the RaspberryPi : Go to the repository that contains your code (using ls / cd), and put the files you wish to send in the repository (files_to_send). You can then launch the python code using :
     ```
     python transmitter.py
+    ```
+Press **Ctrl + C** to stop the receiver program when you have succesfully received the files. The data should have been send to the receiver with success !
+
+## Launch distant communication with different network connexions (through WiFi, _branch Simple_communication_with_RaspberryPi_Online_MQTT_) :
+
+1. Modify the MQTT_Broket parameter in the python files
+
+    Open both programs **transmitter.py** & **receiver.py** and modify the line _MQTT_Broker_ to connect to the online MQTT_Broker *test.mosquitto.org* :
+    ```
+    MQTT_BROKER = "test.mosquitto.org"
+    ```
+    You should also change the name of the topics, to avoid any conflicts with other users (because the broker is accessible to anyone), so don't mind changing both line ***in both files*** as follows (here's an example) :
+    ```
+    TOPIC_IMAGE = "pi/photo_proj_finland"
+    TOPIC_ACK = "pc/ack_proj_finland"
+    ```
+
+2. Start the communication :
+
+- On the receiver side : Connect the device to Internet, open a CMD Terminal and execute the **receiver.py** file using : 
+    ```
+    python receiver.py
+    ```
+
+- On the RaspberryPi side : Make sure the RaspberryPi is connected with WiFi.
+
+    Go to the repository that contains your code (using ls / cd), and put the files you wish to send in the repository (files_to_send). You can then launch the python code using :
+    ```
+    python transmitter.py
+ 
     ```
 Press **Ctrl + C** to stop the receiver program when you have succesfully received the files. The data should have been send to the receiver with success !
