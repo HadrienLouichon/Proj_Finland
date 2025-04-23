@@ -8,6 +8,7 @@ Link to Notion : https://www.notion.so/hadrienlouichon/Stage-Finlande-1d6d0aa4a0
 1. Installation of the MQTT Broker (Mosquitto) :
 
 To allow the communication between IOT devices, the use of a Broker  is needed. I chose Mosquito Brocker, download here : https://mosquitto.org/
+The documentation can be found here : https://eclipse.dev/paho/files/paho.mqtt.python/html/client.html
 
 Then, execute the installer and follow the basic instructions. Keep track of the path where it has been installed (we will need this path for the [distant communication](#launch-distant-communication-through-wifi)).
 
