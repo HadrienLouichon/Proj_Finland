@@ -3,10 +3,9 @@ import base64
 import time
 import uuid
 import json
-import ssl
 import os
 
-MQTT_BROKER = "localhost" # Central HUB that connects devices altogether.
+MQTT_BROKER = "192.168.151.25" # Put here the IP address of the MQTT broker (device that will receive datas).
 MQTT_PORT = 1883 # Port for MQTT communication.
 USE_TLS = False # Port 8883 is used for secure communication (TLS/SSL).
 
