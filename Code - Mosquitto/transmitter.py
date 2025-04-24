@@ -26,7 +26,6 @@ def main():
     client.subscribe(TOPIC_ACK) # Subscribe to the feedback topic.
     client.loop_start()
 
-    files = []
     repository = "files_to_send"
     filesnames = next(os.walk(repository), (None, None, []))[2] # [] if no file
     
