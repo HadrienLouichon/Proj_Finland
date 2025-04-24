@@ -3,104 +3,74 @@ import base64
 import time
 import uuid
 import json
+import ssl
 import os
 
-MQTT_BROKER = "localhost" #Connect to the local broket
+MQTT_BROKER = "localhost"
 MQTT_PORT = 1883
 USE_TLS = False
+MQTT_USERNAME = ""
+MQTT_PASSWORD = ""
 
-TOPIC_IMAGE = "pi/photo" # Topic for the data
-TOPIC_ACK = "pc/ack" # Topic for the feedback
-
-CHUNK_SIZE = 10_000_000  # 10 Mo = Max size of each chunk of the data
+TOPIC_IMAGE = "pi/photo"
+TOPIC_ACK = "pc/ack"
 
 ack_recu = False
 message_id_en_cours = ""
 
-# Main function that connects to the MQTT broker, sends files through the main topic and also subscribe to the feedback topic.
-def main():
-    client = mqtt.Client()
-    client.on_message = on_message #Callback function to handle incoming messages (feedback).
-
-    client.connect(MQTT_BROKER, MQTT_PORT, 60)
-    client.subscribe(TOPIC_ACK) # Subscribe to the feedback topic.
-    client.loop_start()
-
-    # List of files to send.
-    files =  []
-    repository = "files_to_send"
-    os.makedirs(repository, exist_ok=True)
-
-    files_name = ["LargeVideo.mp4", "VeryLargeImage.jpg", "LargeImage.jpg"] # Names of files to send.
-    for file_name in files_name:
-        file = os.path.join(repository, file_name)
-        files.append(file)
-    print(files)
-
-    for file in files:
-        if os.path.exists(file):
-            send_file(file, client)
-        else:
-            print(f"❌ This data has not been found : {file}")
-
-    time.sleep(2) # Wait some time between each file to be sent to avoid too much traffic.
-    client.loop_stop()
-    client.disconnect()
-    print("[TRANSMITTER] End of the transmission.")
-
-# Callback function to handle incoming messages (feedback).
 def on_message(client, userdata, msg):
-        global ack_recu
-        ack = json.loads(msg.payload.decode('utf-8'))
-        if ack.get("id") == message_id_en_cours:
-            ack_recu = True
-            print(f"[RECEIVER] '{ack.get('status')}' : the data was succesfully received by the receiver !")
+    global ack_recu
+    ack = json.loads(msg.payload.decode('utf-8'))
+    if ack.get("id") == message_id_en_cours:
+        ack_recu = True
+        print(f"[SIMULATEUR] Accusé de réception : {ack.get('status')}")
 
-# Function that sends each file to the receiver in chunks.
-def send_file(file, client):
+client = mqtt.Client()
+client.on_message = on_message
 
-    global message_id_en_cours, ack_recu
+if USE_TLS:
+    client.tls_set(cert_reqs=ssl.CERT_NONE)
+    client.tls_insecure_set(True)
+
+if MQTT_USERNAME:
+    client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+
+client.connect(MQTT_BROKER, MQTT_PORT, 60)
+client.subscribe(TOPIC_ACK)
+client.loop_start()
+
+# === Liste des fichiers à envoyer
+fichiers = ["files_to_send/wordfile.docx", "files_to_send/pdffile.pdf", "files_to_send/scriptfile.py"]
+
+for fichier in fichiers:
     ack_recu = False
-    message_id = str(uuid.uuid4())
-    message_id_en_cours = message_id
+    message_id_en_cours = str(uuid.uuid4())
 
-    with open(file, "rb") as f:
-        file_data = f.read()
+    with open(fichier, "rb") as f:
+        contenu_base64 = base64.b64encode(f.read()).decode("utf-8")
 
-    total_chunks = (len(file_data) + CHUNK_SIZE - 1) // CHUNK_SIZE # Calculate the number of chunks needed to send the file.
-    filename = os.path.basename(file)
+    payload = {
+        "id": message_id_en_cours,
+        "filename": os.path.basename(fichier),
+        "data": contenu_base64
+    }
 
-    print(f"\n📤 Sending '{filename}' ({len(file_data)} octets) through {total_chunks} chunks...")
+    max_essais = 3
+    for tentative in range(1, max_essais + 1):
+        print(f"[SIMULATEUR] Envoi de {fichier} - tentative {tentative}")
+        client.publish(TOPIC_IMAGE, json.dumps(payload))
 
-    for i in range(total_chunks):
-        chunk = file_data[i * CHUNK_SIZE : (i + 1) * CHUNK_SIZE]
-        payload = {
-            "message_id": message_id,
-            "filename": filename,
-            "chunk_id": i,
-            "total_chunks": total_chunks,
-            "data": base64.b64encode(chunk).decode("utf-8")
-        }
-        max_try = 3 # Maximum number of tries to send the chunk (in case of a ponctual error).
-        for Try in range(1, max_try + 1):
-
-            print(f"[TRANSMITTER] Sending {filename} - Chunk {i+1}/{total_chunks} - Try n°{Try}")
-            client.publish(TOPIC_IMAGE, json.dumps(payload))
-            time.sleep(0.1)
-
-            for _ in range(10):  # timeout 5 sec
-                if ack_recu:
-                    break
-                time.sleep(0.5)
-
-            if ack_recu: ## If the feedback is received, we can stop sending the chunk.
-                print(f"[RECEIVER] {filename} → was successfully sent.")
+        for _ in range(10):  # timeout 5 sec
+            if ack_recu:
                 break
-            else:
-                print(f"[RECEIVER] No feedback for {filename}, new try...")
+            time.sleep(0.5)
 
-    print(f"File '{filename}' send with success.")
-    time.sleep(1.5)
+        if ack_recu:
+            print(f"[SIMULATEUR] {fichier} → envoyé avec succès ✅")
+            break
+        else:
+            print(f"[SIMULATEUR] Pas d’ACK pour {fichier}, nouvelle tentative...")
 
-if __name__ == "__main__":
-    main()
+client.loop_stop()
+client.disconnect()
+print("[SIMULATEUR] Fin du programme.")
