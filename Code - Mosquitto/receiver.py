@@ -1,74 +1,61 @@
 import paho.mqtt.client as mqtt
 import base64
 import json
+import ssl
 import os
 
-MQTT_BROKER = "localhost"  # Connect to the local broker
+MQTT_BROKER = "localhost"
 MQTT_PORT = 1883
 USE_TLS = False
+MQTT_USERNAME = ""
+MQTT_PASSWORD = ""
 
-TOPIC_IMAGE = "pi/photo" # Topic for the data
-TOPIC_ACK = "pc/ack" # Topic for the feedback
+TOPIC_IMAGE = "pi/photo"
+TOPIC_ACK = "pc/ack"
 
-buffers = {}
-
-# Function which subscribes to the main topic
-def on_connect(client, userdata, flags, rc): 
-    print("[RECEIVER] Connected, waiting for data ...")
+def on_connect(client, userdata, flags, rc):
+    print("[RECEPTEUR] Connecté, en attente de messages...")
     client.subscribe(TOPIC_IMAGE)
 
-# Callback function that handles incoming messages (data) and reconstruct to have the final data.
 def on_message(client, userdata, msg):
     try:
-        # Get & Decode the incoming message
-        payload = json.loads(msg.payload.decode("utf-8"))
-        message_id = payload["message_id"]
-        filename = payload["filename"]
-        chunk_id = payload["chunk_id"]
-        total_chunks = payload["total_chunks"]
-        data = base64.b64decode(payload["data"])
+        data = json.loads(msg.payload.decode("utf-8"))
+        fichier_nom = data.get("filename", f"recu_{data['id']}")
+        contenu = base64.b64decode(data["data"])
 
-        print(f"Chunk {chunk_id+1}/{total_chunks} of the file '{filename}' received.")
+        dossier = "files_received"
+        os.makedirs(dossier, exist_ok=True)
+        chemin = os.path.join(dossier, fichier_nom)
 
-        if message_id not in buffers:
-            buffers[message_id] = {
-                "filename": filename,
-                "chunks": {},
-                "total": total_chunks
-            }
+        with open(chemin, "wb") as f:
+            f.write(contenu)
 
-        buffers[message_id]["chunks"][chunk_id] = data # Store the current chunk in the buffer
+        print(f"[RECEPTEUR] Fichier reçu et sauvegardé : {chemin}")
 
-        repository = "files_received"
-        os.makedirs(repository, exist_ok=True)
-        complete_path = os.path.join(repository, filename)
-
-        if len(buffers[message_id]["chunks"]) == total_chunks: # Reconstruct the file if all chunks have been received
-            with open(complete_path, "wb") as f:
-                for i in range(total_chunks):
-                    f.write(buffers[message_id]["chunks"][i])
-            print(f"✅ The data was completely reconstructed here : {complete_path}")
-            del buffers[message_id]
-
-        # Send feedback back to the sender (transmitter.py)
         ack_payload = {
-            "id": payload["message_id"],
-            "status": "Reception ✅"
+            "id": data["id"],
+            "status": "Réception OK ✅"
         }
         client.publish(TOPIC_ACK, json.dumps(ack_payload))
 
-    # except json.JSONDecodeError:
     except Exception as e:
-        print("[RECEIVER] ❌ Error :", str(e))
+        print("[RECEPTEUR] Erreur :", str(e))
         if "data" in locals():
             client.publish(TOPIC_ACK, json.dumps({
-                "message_id": payload.get("message_id"),
-                "status": f"Error ❌ : {str(e)}"
+                "id": data.get("id"),
+                "status": f"Erreur ❌ : {str(e)}"
             }))
 
 client = mqtt.Client()
 client.on_connect = on_connect
 client.on_message = on_message
 
-client.connect(MQTT_BROKER, MQTT_PORT,60)
+if USE_TLS:
+    client.tls_set(cert_reqs=ssl.CERT_NONE)
+    client.tls_insecure_set(True)
+
+if MQTT_USERNAME:
+    client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+
+client.connect(MQTT_BROKER, MQTT_PORT, 60)
 client.loop_forever()
