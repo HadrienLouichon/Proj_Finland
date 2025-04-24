@@ -30,12 +30,20 @@ In case other libraries need to be installed (this souldn't be mandatory), insta
 pip install os-sys uuid
 ```
 ## Content Table :
-- [Launch a basic local communication](#launch-basic-local-communication-branch-send_multiple_documents)
-- [Launch a basic distant communication](#launch-distant-communication-through-wifi)
+- [Launch a basic local communication](#launch-basic-local-communication-branch-send_multiple_documents--send_heavier_data)
+- [Launch a basic distant communication](#launch-distant-communication-through-wifi-branch-simple_communication_with_raspberrypi--large_communication_with_raspberrypi-)
 - [Launch a basic communication using different network](#launch-distant-communication-with-different-network-connexions-through-wifi-branch-simple_communication_with_raspberrypi_online_mqtt)
 
-
-## Launch basic local communication (_branch Send_multiple_documents_)
+## Caracteristics of each branch :
+- Branch *main* : Last up to date branch, which will be used for the communication between the RaspberryPi's and the computer.
+- Branch *First_impl_Simple_Local_Transmitter_Receiver* : First functionnal implementation of the Mosquitto MQTT code, transmitting a small data in local.
+- Branch *Send_multiple_documents* : Second functionnal implementation of the MQTT, transmitting multiple documents / data locally.
+- Branch *Send_heavier_data* : Allows to transmit multiple large set data by decomposing it into chunks.
+- Branch *Simple_communication_with_RaspberryPi* : First functionnal implementation of online MQTT, transmitting multiple documents from two different devices by being on the same network.
+- Branch *Simple_communication_with_RaspberryPi_Online_MQTT* : Second functionnal implementation of online MQTT, using a remote MQTT (test.mosquitto.org).
+- Branch *Large_communication_with_RaspberryPi* : Allows to send large documents / data between different devices.
+  
+## Launch basic local communication (_branch Send_multiple_documents & Send_heavier_data_)
 
 1. Start Mosquitto MQTT Broker :
 
@@ -60,15 +68,17 @@ pip install os-sys uuid
 
     Firstly, go to the working repository and put the files you wish to transmit in the **files_to_send** repository.
 
-    Then, open two different CMD terminals, one for the transmitter and one for the receiver. Launch the files using : 
+    Then, open multiple different CMD terminals (one for each transmitter and one for the receiver). Launch the files using : 
     ```
     1st terminal : python receiver.py
     2nd terminal : python transmitter.py
+    3rd terminal : python transmitter2.py
+    ...
     ```
 
 Press **Ctrl + C** to stop the receiver program when you have succesfully received the files.
 
-## Launch distant communication (through WiFi, _branch Simple_communication_with_RaspberryPi_) :
+## Launch distant communication (through WiFi, _branch Simple_communication_with_RaspberryPi & Large_communication_with_RaspberryPi_) :
 
 1. Open a Listening point to communicate through :
 
