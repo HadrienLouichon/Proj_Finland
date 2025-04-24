@@ -26,20 +26,13 @@ def main():
     client.subscribe(TOPIC_ACK) # Subscribe to the feedback topic.
     client.loop_start()
 
-    # List of files to send.
-    files =  []
     repository = "files_to_send"
-    os.makedirs(repository, exist_ok=True)
-
-    files_name = ["LargeVideos.mp4"] # Names of files to send.
-    for file_name in files_name:
-        file = os.path.join(repository, file_name)
-        files.append(file)
-    print(files)
-
-    for file in files:
-        if os.path.exists(file):
-            send_file(file, client)
+    filesnames = next(os.walk(repository), (None, None, []))[2] # [] if no file
+    
+    for file in filesnames:
+        path_file = os.path.join(repository, file)
+        if os.path.exists(path_file):
+            send_file(path_file, client)
         else:
             print(f"❌ This data has not been found : {file}")
 
