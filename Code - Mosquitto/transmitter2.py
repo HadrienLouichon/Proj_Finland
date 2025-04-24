@@ -31,7 +31,7 @@ def main():
     repository = "files_to_send"
     os.makedirs(repository, exist_ok=True)
 
-    files_name = ["LargeVideo.mp4"] # Names of files to send.
+    files_name = ["VeryLargeImage.jpg", "LargeImage.jpg"] # Names of files to send.
     for file_name in files_name:
         file = os.path.join(repository, file_name)
         files.append(file)
