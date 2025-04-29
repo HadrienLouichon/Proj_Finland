@@ -60,15 +60,28 @@ sudo systemctl status mosquitto
 
 2. Installation of python and its libraries :
 
-On your computer :
-Open a Terminal and first install at least python 3.13 using the following (you can first check the current version with *python*):
-```
-pip install paho-mqtt
-```
-In case other libraries need to be installed (this souldn't be mandatory), install them using pip :
-```
-pip install os-sys uuid
-```
+- If you don't want to use Jupyter :
+    On your computer :
+    Open a Terminal and first install at least python 3.13 using the following (you can first check the current version with *python*):
+    ```
+    pip install paho-mqtt
+    ```
+    In case other libraries need to be installed (this souldn't be mandatory), install them using pip :
+    ```
+    pip install os-sys uuid
+    ```
+- If you plan to use Jupyter :
+    You may need to use a virtual environment, to install the librarires and execute the code directly from Jupyter. To do this, you first need to install venv in a Terminal :
+    ```
+    sudo apt install python3.8-venv
+    ```
+    Then go to the folder that contains the code and initialize a virtual environment : 
+    ```
+    cd #Name_Of_Your_Folder
+    python3 -m venv venv
+    source venv/bin/activate
+    pip install ipykernel
+    ```
 
 ### On the RaspberryPi's :
 
@@ -95,6 +108,7 @@ See if the status 'auto mode' is set with the correct python version !
 - [Launch a basic distant communication](#launch-distant-communication-through-wifi-branch-simple_communication_with_raspberrypi--large_communication_with_raspberrypi-)
 - [Launch a basic communication using different network](#launch-distant-communication-with-different-network-connexions-through-wifi-branch-simple_communication_with_raspberrypi_online_mqtt)
 - [Launch a RaspberryPi - Ubuntu Computer communication](#launch-a-raspberrypi---ubuntu-computer-communication-through-same-wifi-branch-main)
+- [Reset & Reinstalling a RaspberryPi 5](#reset-and-reinstalling-a-raspberrypi-5-from-scratch)
 
 ## Caracteristics of each branch :
 - Branch *main* : Last up to date branch, which will be used for the communication between the RaspberryPi's and the computer.
@@ -259,7 +273,11 @@ Press **Ctrl + C** to stop the receiver program when you have succesfully receiv
     sudo ./Mosquitto_MQTT_admin.sh
     ```
 
-    Now you can start the receiving code by opening another Terminal (while still being in the **Setup** folder):
+    Now you can start the receiving code. 
+    - If you are using Jupyter :
+        You can execute all cells from the file 'receiver.ipynb', if you are asked to choose a kernel, select the one you have previously initialised (venv/bin/python), if you don't know what this is about, check this [section](#on-linux--ubuntu)
+    
+     by opening another Terminal (while still being in the **Setup** folder):
     ```
     bash ./Receiver.sh
     ```
@@ -271,3 +289,65 @@ Press **Ctrl + C** to stop the receiver program when you have succesfully receiv
     bash Transmitting.sh
     ```
 Press **Ctrl + C** to stop the receiver program & the Mosquitto when you have succesfully received the files and want to end the transmission. The data should have been send to the receiver with success (in the folder Code_Mosquitto/MQTT_Broker/files_received)!
+
+## Reset and Reinstalling a RaspberryPi 5 from scratch :
+
+- Make a clone of the Raspberry to an external USB Drive in case something wrong happen :
+    Go to a terminal in your Raspberry and do (you need to have GIT, otherwise install it):
+    ```
+    git clone https://github.com/billw2/rpi-clone.git 
+	cd rpi-clone
+	sudo cp rpi-clone rpi-clone-setup /usr/local/sbin
+    ```
+    Insert your USB Drive, and look for its PATH (ex ; /dev/sda) using :
+    ```
+    lsblk
+    ```
+    You may need to unmount the destination, so look for PATHs like */dev/sda1*, */dev/sda2*, ... and do for each one of them :
+    ```
+    sudo umount #Put_the_PATH_here 
+    ex : sudo umount /dev/sda1
+    ...
+    ```
+    Then so this (take only the last part of the PATH, for example if the PATH is **/dev/sda**, take only **sda**):
+    ```
+    sudo rpi-clone #terminology -v 
+    ex : sudo rpi-clone sda -v
+    ```
+    They can ask you to choose an "Optional destination name", which will be the name of the clone, so you can put the name you wish.
+
+- Reset the Raspberry :
+    You will need to install **rpi-imager** :
+    ```
+    sudo apt update
+    sudo apt full-upgrade
+    sudo apt install rpi-imager
+    sudo rpi-imager
+    ```
+    A window should then launch, and you can select the device (for us it is a RaspberryPi 5), its OS (the recommended one) and the Storage (must be an external one).
+    
+    I used this step in order to reset both of the RaspberryPis : 
+    
+    1. I did this previous step with a USB Driver as storage, so that a fresh Raspberry is installed on it. I then booted on this driver (shutdown the Raspberry, remove its internal SD Card, put the USB Driver and boot).
+    2. After I booted, I initialised the new system so that the RaspberryPi is functional (still on the USB Drive). I then reinstalled rpi-imager and this time I used the SD Card as the Storage (you may also need to unmount the SD Card with the previous steps).
+    3. You can then shutdown the RaspberryPi and boot on the SD Card to have a freshly new OS.
+
+
+- Reinstalling key components :
+    Just after you finished the reset with the clean and updated OS, the main features should be already installed : Python with some libraries (Numpy, Scikit), Git, Web Explorer such as Firefox.
+    You can make sure your system is updated with :
+    ```
+    sudo apt update
+    sudo apt upgrade -y
+    ```
+    So you'll need to install a few more components in order to make the system work :
+    Additional python libraries :
+    ```
+    sudo apt install python3-matplotlib
+    sudo apt install python3-paho-mqtt
+    ```
+    VS Code :
+    ```
+    sudo apt install code -y
+    ```
+    This should be it !
