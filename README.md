@@ -38,25 +38,25 @@ pip install os-sys uuid
 
 1. Installation of the MQTT Broker (Mosquitto) :
 
-Go to a terminal and install Mosquitto MQTT Broker using the following commands :
-```
-sudo apt update
-sudo apt install mosquitto mosquitto-clients
-```
-You can also install net-tools to check if the ports are open (when mosquitto is runnin) :
-```
-sudo apt install net-tools
-```
-Check if the installation succeded by testing Mosquitto using 3 different terminals :
-```
-1st Terminal : mosquitto        #To launch mosquitto
-2nd Terminal : mosquitto_sub -t "test/topic" -v
-3rd Terminal : mosquitto_pub -t "test/topic" -m "hello"
-```
-You should now receive "hello" in your second terminal ! If not, try reinstalling Mosquitto, or check its status using :
-```
-sudo systemctl status mosquitto
-```
+    Go to a terminal and install Mosquitto MQTT Broker using the following commands :
+    ```
+    sudo apt update
+    sudo apt install mosquitto mosquitto-clients
+    ```
+    You can also install net-tools to check if the ports are open (when mosquitto is runnin) :
+    ```
+    sudo apt install net-tools
+    ```
+    Check if the installation succeded by testing Mosquitto using 3 different terminals :
+    ```
+    1st Terminal : mosquitto        #To launch mosquitto
+    2nd Terminal : mosquitto_sub -t "test/topic" -v
+    3rd Terminal : mosquitto_pub -t "test/topic" -m "hello"
+    ```
+    You should now receive "hello" in your second terminal ! If not, try reinstalling Mosquitto, or check its status using :
+    ```
+    sudo systemctl status mosquitto
+    ```
 
 2. Installation of python and its libraries :
 
@@ -229,21 +229,21 @@ Press **Ctrl + C** to stop the receiver program when you have succesfully receiv
 
 2. Start the communication :
 
-- On the receiver side : Connect the device to Internet, open a CMD Terminal and execute the **receiver.py** file using : 
-    ```
-    python receiver.py
-    ```
+    - On the receiver side : Connect the device to Internet, open a CMD Terminal and execute the **receiver.py** file using : 
+        ```
+        python receiver.py
+        ```
 
-- On the RaspberryPi side : Make sure the RaspberryPi is connected with WiFi.
+    - On the RaspberryPi side : Make sure the RaspberryPi is connected with WiFi.
 
-    Go to the repository that contains your code (using ls / cd), and put the files you wish to send in the repository (files_to_send). You can then launch the python code using :
-    ```
-    python transmitter.py
-    ```
-    Or you can launch the python file from the bash file :
-    ```
-    bash transmitter.py
-    ```
+        Go to the repository that contains your code (using ls / cd), and put the files you wish to send in the repository (files_to_send). You can then launch the python code using :
+        ```
+        python transmitter.py
+        ```
+        Or you can launch the python file from the bash file :
+        ```
+        bash transmitter.py
+        ```
 Press **Ctrl + C** to stop the receiver program when you have succesfully received the files. The data should have been send to the receiver with success !
 
 ## Launch a RaspberryPi - Ubuntu Computer communication (through same WiFi, _branch main_) :
