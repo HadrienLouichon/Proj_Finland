@@ -9,6 +9,8 @@ from sklearn.metrics import pairwise_distances, accuracy_score, confusion_matrix
 from sklearn.model_selection import train_test_split, StratifiedKFold
 from sklearn.preprocessing import LabelEncoder
 from scipy.stats import mode
+from matplotlib.colors import ListedColormap
+from matplotlib.patches import Patch
 
 # --- 1. Chargement des données Salinas-A ---
 def load_salinas_A():
@@ -20,7 +22,7 @@ def load_salinas_A():
     return X[mask], y[mask], labels  # Return full label map for visualization
 
 # --- 2. Sélection des points de référence ---
-def select_reference_points(X_train, y_train, n_components=1):
+def select_reference_points(X_train, y_train, n_components=10):
     R = []
     T = []
     for label in np.unique(y_train):
@@ -47,7 +49,7 @@ def train_mlm(X, y, R, T, input_metric='euclidean'):
     return Bb
 
 # --- 4. Prédiction MLM ---
-def predict_mlm(X_new, T, R, Bb, input_metric='euclidean', n_neighbors=1):
+def predict_mlm(X_new, T, R, Bb, input_metric='euclidean', n_neighbors=25):
     D_new = pairwise_distances(X_new, R, metric=input_metric)
     delta = D_new.dot(Bb)
     predictions = []
@@ -74,7 +76,7 @@ def plot_pca_projection(X, y, title='PCA Projection'):
     plt.show()
 
 # --- 6. Cross-validation ---
-def run_cross_validation(X, y, k=5, n_neighbors=3):
+def run_cross_validation(X, y, k=5, n_neighbors=10):
     skf = StratifiedKFold(n_splits=k, shuffle=True, random_state=42)
     acc_scores = []
     for train_index, test_index in skf.split(X, y):
@@ -116,13 +118,37 @@ def benchmark_training_prediction(X_train, y_train, X_test, y_test, n_neighbors=
     print(f"Prediction Time: {end_pred - start_pred:.4f}s")
     return acc, y_pred
 
-# --- 9. Affichage des prédictions sous forme d'image ---
-def plot_label_map(predicted_labels, original_shape, title='Label Map'):
-    label_map = predicted_labels.reshape(original_shape)
-    plt.figure(figsize=(6, 6))
-    plt.imshow(label_map, cmap='tab20')
-    plt.title(title)
-    plt.axis('off')
+# --- 9. Affichage des cartes avec légende par patch couleur ---
+def plot_comparison_maps(true_labels, pred_labels, shape, class_names=None, class_colors=None, class_values=None):
+    true_reshaped = true_labels.reshape(shape)
+    pred_reshaped = pred_labels.reshape(shape)
+    errors = (true_reshaped != pred_reshaped) & (true_reshaped != 0)
+
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+
+    if class_colors is not None:
+        cmap = ListedColormap(class_colors)
+    else:
+        cmap = 'tab20'
+
+    im0 = axes[0].imshow(true_reshaped, cmap=cmap, vmin=min(class_values), vmax=max(class_values))
+    axes[0].set_title("Ground Truth")
+    axes[0].axis('off')
+
+    im1 = axes[1].imshow(pred_reshaped, cmap=cmap, vmin=min(class_values), vmax=max(class_values))
+    axes[1].set_title("Predicted Labels")
+    axes[1].axis('off')
+
+    im2 = axes[2].imshow(errors, cmap='Reds')
+    axes[2].set_title("Prediction Errors")
+    axes[2].axis('off')
+
+    # Légende personnalisée avec patchs
+    if class_names and class_colors:
+        patches = [Patch(color=color, label=label) for color, label in zip(class_colors, class_names)]
+        fig.legend(handles=patches, loc='lower center', ncol=6)
+
+    plt.tight_layout()
     plt.show()
 
 # --- 10. Exécution principale ---
@@ -150,5 +176,8 @@ if __name__ == "__main__":
     predicted_all = predict_mlm(X, T, R, Bb, n_neighbors=3)
     predicted_full[mask.reshape(full_labels.shape)] = predicted_all.reshape(-1)
 
-    plot_label_map(full_labels, full_labels.shape, title='Ground Truth Labels')
-    plot_label_map(predicted_full, full_labels.shape, title='Predicted Labels')
+    class_values = np.array([1, 10, 11, 12, 13, 14])
+    class_names = ["Brocoli", "Corn", "Lettuce4wk", "Lettuce5wk", "Lettuce6wk", "Lettuce7wk"]
+    class_colors = ['#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4']
+
+    plot_comparison_maps(full_labels, predicted_full, full_labels.shape, class_names=class_names, class_colors=class_colors, class_values=class_values)
