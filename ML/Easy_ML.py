@@ -12,44 +12,55 @@ from scipy.stats import mode
 from matplotlib.colors import ListedColormap
 from matplotlib.patches import Patch
 
-# --- 1. Chargement des données Salinas-A ---
+# --- Load Salinas-A data ---
 def load_salinas_A():
     data = scipy.io.loadmat('ML/SalinasA_corrected.mat')['salinasA_corrected']
+    #print(data)
+    #print("Shape of Salinas-A data:", data.shape)
     labels = scipy.io.loadmat('ML/SalinasA_gt.mat')['salinasA_gt']
+    #print(labels)
+    #print("Shape of Salinas-A labels:", labels.shape)
     X = data.reshape(-1, data.shape[-1])
     y = labels.reshape(-1)
-    mask = y > 0  # remove background (label 0)
-    return X[mask], y[mask], labels  # Return full label map for visualization
 
-# --- 2. Sélection des points de référence ---
-def select_reference_points(X_train, y_train, n_components=10):
-    R = []
-    T = []
-    for label in np.unique(y_train):
+    mask = y > 0  # remove background (label 0)
+    return X[mask], y[mask], labels 
+
+# --- Reference points selection ---
+def select_reference_points(X_train, y_train, n_components=25):
+    R = [] # Selected reference points list
+    T = [] # Corresponding labels list
+    for label in np.unique(y_train): # Select reference points for each label
         X_class = X_train[y_train == label]
-        pca = PCA(n_components=n_components)
+        #print(f"Processing class {label} with {X_class.shape[0]} samples.")
+        #print(X_class)
+        pca = PCA(n_components=n_components) # Compute number of components with PCA from the training data.
         X_pca = pca.fit_transform(X_class)
-        for i in range(n_components):
-            scores = X_pca[:, i]
-            sorted_indices = np.argsort(scores)
-            min_ = X_class[sorted_indices[0]]
+        #print(f"PCA components shape for class {label}: {X_pca.shape}")
+        
+        for i in range(n_components): # Select 3*n_components training points for each label.
+            sorted_indices = np.argsort(X_pca[:, i]) # Argument sort component.
+            mini = X_class[sorted_indices[0]]
             median = X_class[sorted_indices[len(sorted_indices) // 2]]
-            max_ = X_class[sorted_indices[-1]]
-            R.extend([min_, median, max_])
+            maxi = X_class[sorted_indices[-1]]
+            R.extend([mini, median, maxi])
             T.extend([label, label, label])
+        #print(len(R), len(T))
     return np.array(R), np.array(T)
 
-# --- 3. Entraînement MLM ---
+# --- MLM Training phase ---
 def train_mlm(X, y, R, T, input_metric='euclidean'):
-    y = y.astype(float)
+    y = y.astype(float) # Convert labels to float for distance calculations
     T = T.astype(float)
-    D_out = pairwise_distances(y[:, np.newaxis], T[:, np.newaxis], metric='euclidean')
-    D_in = pairwise_distances(X, R, metric=input_metric)
+    
+    D_out = pairwise_distances(y[:, np.newaxis], T[:, np.newaxis], metric='euclidean') # Output distances
+    print("Output distances shape:", D_out.shape)
+    D_in = pairwise_distances(X, R, metric=input_metric) # 
     Bb = np.linalg.pinv(D_in).dot(D_out)
     return Bb
 
 # --- 4. Prédiction MLM ---
-def predict_mlm(X_new, T, R, Bb, input_metric='euclidean', n_neighbors=25):
+def predict_mlm(X_new, T, R, Bb, input_metric='euclidean', n_neighbors=30):
     D_new = pairwise_distances(X_new, R, metric=input_metric)
     delta = D_new.dot(Bb)
     predictions = []
@@ -76,7 +87,7 @@ def plot_pca_projection(X, y, title='PCA Projection'):
     plt.show()
 
 # --- 6. Cross-validation ---
-def run_cross_validation(X, y, k=5, n_neighbors=10):
+def run_cross_validation(X, y, k=5, n_neighbors=30):
     skf = StratifiedKFold(n_splits=k, shuffle=True, random_state=42)
     acc_scores = []
     for train_index, test_index in skf.split(X, y):
@@ -102,7 +113,7 @@ def plot_confusion_matrix(y_true, y_pred):
     plt.show()
 
 # --- 8. Benchmark temps ---
-def benchmark_training_prediction(X_train, y_train, X_test, y_test, n_neighbors=3):
+def benchmark_training_prediction(X_train, y_train, X_test, y_test, n_neighbors=30):
     start_train = time.time()
     R, T = select_reference_points(X_train, y_train)
     Bb = train_mlm(X_train, y_train, R, T)
@@ -154,16 +165,19 @@ def plot_comparison_maps(true_labels, pred_labels, shape, class_names=None, clas
 # --- 10. Exécution principale ---
 if __name__ == "__main__":
     X, y, full_labels = load_salinas_A()
-    print("Salinas-A loaded:", X.shape, y.shape)
+    print("Shape of Salinas-A loaded:", X.shape, y.shape) # 7138
 
     plot_pca_projection(X, y, title="Salinas-A PCA Projection")
+
+    n_neighbors = 30
+    n_components = 25
 
     print("\n--- Cross-validation ---")
     run_cross_validation(X, y, k=3, n_neighbors=3)
 
     print("\n--- Benchmark ---")
     X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y, test_size=0.2, random_state=42)
-    acc, y_pred = benchmark_training_prediction(X_train, y_train, X_test, y_test, n_neighbors=3)
+    acc, y_pred = benchmark_training_prediction(X_train, y_train, X_test, y_test, n_neighbors=30)
 
     print("\n--- Confusion Matrix ---")
     plot_confusion_matrix(y_test, y_pred)
@@ -173,7 +187,7 @@ if __name__ == "__main__":
     predicted_full = np.zeros(full_labels.shape, dtype=int)
     R, T = select_reference_points(X, y)
     Bb = train_mlm(X, y, R, T)
-    predicted_all = predict_mlm(X, T, R, Bb, n_neighbors=3)
+    predicted_all = predict_mlm(X, T, R, Bb, n_neighbors=30)
     predicted_full[mask.reshape(full_labels.shape)] = predicted_all.reshape(-1)
 
     class_values = np.array([1, 10, 11, 12, 13, 14])
