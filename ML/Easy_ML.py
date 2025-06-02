@@ -11,6 +11,7 @@ from sklearn.preprocessing import LabelEncoder
 from scipy.stats import mode
 from matplotlib.colors import ListedColormap
 from matplotlib.patches import Patch
+from itertools import product
 
 # --- Load Salinas-A data ---
 def load_salinas_A():
@@ -27,7 +28,7 @@ def load_salinas_A():
     return X[mask], y[mask], labels 
 
 # --- Reference points selection ---
-def select_reference_points(X_train, y_train, n_components=25):
+def select_reference_points(X_train, y_train, n_components):
     R = [] # Selected reference points list
     T = [] # Corresponding labels list
     for label in np.unique(y_train): # Select reference points for each label
@@ -49,34 +50,42 @@ def select_reference_points(X_train, y_train, n_components=25):
     return np.array(R), np.array(T)
 
 # --- MLM Training phase ---
-def train_mlm(X, y, R, T, input_metric='euclidean'):
+def train_mlm(X, y, R, T, input_metric):
     y = y.astype(float) # Convert labels to float for distance calculations
     T = T.astype(float)
     
-    D_out = pairwise_distances(y[:, np.newaxis], T[:, np.newaxis], metric='euclidean') # Output distances
-    print("Output distances shape:", D_out.shape)
-    D_in = pairwise_distances(X, R, metric=input_metric) # 
-    Bb = np.linalg.pinv(D_in).dot(D_out)
-    return Bb
+    Distance_out = pairwise_distances(y[:, np.newaxis], T[:, np.newaxis], metric=input_metric) # Output distances
+    #print("Output distances shape:", Distance_out.shape)
+    Distance_in = pairwise_distances(X, R, metric=input_metric) # Input distances
+    #print("Input distances shape:", Distance_in.shape)
+    
+    # Approximation of the coefficients using OLS.
+    B = np.linalg.pinv(Distance_in).dot(Distance_out)
+    #print("B shape:", B.shape)
+    #print(B)
+    return B
 
-# --- 4. Prédiction MLM ---
-def predict_mlm(X_new, T, R, Bb, input_metric='euclidean', n_neighbors=30):
-    D_new = pairwise_distances(X_new, R, metric=input_metric)
-    delta = D_new.dot(Bb)
+# --- MLM prediction phase ---
+def predict_mlm(X_new, T, R, B, n_neighbours, input_metric):
+    D_new = pairwise_distances(X_new, R, metric=input_metric) # New distances between new data and R.
+    
+    # Solve the equation : 
+    delta = D_new.dot(B)
     predictions = []
     for d in delta:
         sorted_indices = np.argsort(d)
-        if n_neighbors == 1:
-            predictions.append(T[sorted_indices[0]])
+        if n_neighbours != 1:
+            closest_labels = T[sorted_indices[:n_neighbours]]
+            predictions.append(mode(closest_labels, keepdims=True).mode[0]) # Select the mode of the neighbours
         else:
-            closest_labels = T[sorted_indices[:n_neighbors]]
-            predictions.append(mode(closest_labels, keepdims=True).mode[0])
+            predictions.append(T[sorted_indices[0]]) # Select nearest neighbour
     return np.array(predictions)
 
-# --- 5. Visualisation PCA ---
+# --- Visualisation of the PCA ---
 def plot_pca_projection(X, y, title='PCA Projection'):
-    pca = PCA(n_components=2)
+    pca = PCA(n_components=25)
     X_pca = pca.fit_transform(X)
+    
     plt.figure(figsize=(8, 6))
     scatter = plt.scatter(X_pca[:, 0], X_pca[:, 1], c=y, cmap='tab20', s=1)
     plt.legend(*scatter.legend_elements(), title="Classes", bbox_to_anchor=(1.05, 1))
@@ -86,25 +95,29 @@ def plot_pca_projection(X, y, title='PCA Projection'):
     plt.tight_layout()
     plt.show()
 
-# --- 6. Cross-validation ---
-def run_cross_validation(X, y, k=5, n_neighbors=30):
+# --- Cross-validation ---
+def run_cross_validation(X, y, n_neighbours, n_components, input_metric, k=5):
     skf = StratifiedKFold(n_splits=k, shuffle=True, random_state=42)
     acc_scores = []
+
     for train_index, test_index in skf.split(X, y):
         X_train, X_test = X[train_index], X[test_index]
         y_train, y_test = y[train_index], y[test_index]
-        R, T = select_reference_points(X_train, y_train)
-        Bb = train_mlm(X_train, y_train, R, T)
-        y_pred = predict_mlm(X_test, T, R, Bb, n_neighbors=n_neighbors)
+        
+        R, T = select_reference_points(X_train, y_train, n_components)
+        B = train_mlm(X_train, y_train, R, T, input_metric)
+        y_pred = predict_mlm(X_test, T, R, B, n_neighbours, input_metric)
+        
         acc = accuracy_score(y_test, y_pred)
         acc_scores.append(acc)
-        print(f"Fold accuracy: {acc:.4f}")
-    print(f"\nMean Accuracy: {np.mean(acc_scores):.4f}")
+        print(f"Fold accuracy: {acc:.6f}")
+    print(f"\nMean Accuracy: {np.mean(acc_scores):.6f}")
     return acc_scores
 
-# --- 7. Matrice de confusion ---
+# --- Confusion Matrix ---
 def plot_confusion_matrix(y_true, y_pred):
     cm = confusion_matrix(y_true, y_pred)
+    
     plt.figure(figsize=(10, 8))
     sns.heatmap(cm, annot=True, fmt="d", cmap="Blues")
     plt.title("Confusion Matrix")
@@ -112,25 +125,25 @@ def plot_confusion_matrix(y_true, y_pred):
     plt.ylabel("Actual")
     plt.show()
 
-# --- 8. Benchmark temps ---
-def benchmark_training_prediction(X_train, y_train, X_test, y_test, n_neighbors=30):
+# --- Benchmark training ---
+def benchmark_training_prediction(X_train, y_train, X_test, y_test, n_neighbours, n_components, input_metric):
     start_train = time.time()
-    R, T = select_reference_points(X_train, y_train)
-    Bb = train_mlm(X_train, y_train, R, T)
+    R, T = select_reference_points(X_train, y_train, n_components)
+    B = train_mlm(X_train, y_train, R, T, input_metric)
     end_train = time.time()
 
     start_pred = time.time()
-    y_pred = predict_mlm(X_test, T, R, Bb, n_neighbors=n_neighbors)
+    y_pred = predict_mlm(X_test, T, R, B, n_neighbours, input_metric)
     end_pred = time.time()
 
     acc = accuracy_score(y_test, y_pred)
-    print(f"Accuracy: {acc:.4f}")
-    print(f"Training Time: {end_train - start_train:.4f}s")
-    print(f"Prediction Time: {end_pred - start_pred:.4f}s")
+    print(f"Accuracy: {acc:.6f}")
+    print(f"Training Time: {end_train - start_train:.6f}s")
+    print(f"Prediction Time: {end_pred - start_pred:.6f}s")
     return acc, y_pred
 
-# --- 9. Affichage des cartes avec légende par patch couleur ---
-def plot_comparison_maps(true_labels, pred_labels, shape, class_names=None, class_colors=None, class_values=None):
+# --- Comparison maps with color to differiate the labels ---
+def plot_comparison_maps(true_labels, pred_labels, shape, class_names, class_colors, class_values):
     true_reshaped = true_labels.reshape(shape)
     pred_reshaped = pred_labels.reshape(shape)
     errors = (true_reshaped != pred_reshaped) & (true_reshaped != 0)
@@ -154,7 +167,6 @@ def plot_comparison_maps(true_labels, pred_labels, shape, class_names=None, clas
     axes[2].set_title("Prediction Errors")
     axes[2].axis('off')
 
-    # Légende personnalisée avec patchs
     if class_names and class_colors:
         patches = [Patch(color=color, label=label) for color, label in zip(class_colors, class_names)]
         fig.legend(handles=patches, loc='lower center', ncol=6)
@@ -162,32 +174,77 @@ def plot_comparison_maps(true_labels, pred_labels, shape, class_names=None, clas
     plt.tight_layout()
     plt.show()
 
-# --- 10. Exécution principale ---
-if __name__ == "__main__":
-    X, y, full_labels = load_salinas_A()
-    print("Shape of Salinas-A loaded:", X.shape, y.shape) # 7138
+def best_parameters(X, y, input_metric, k_folds=5):
+    
+    n_components_list = [i for i in range(1,30)]
+    n_neighbours_list = [i for i in range(1,30)]
+    print(n_components_list, n_neighbours_list)
 
+    results = []
+    for n_comp, n_neigh in product(n_components_list, n_neighbours_list):
+        print(f"Testing n_components = {n_comp}, n_neighbours = {n_neigh}")
+        scores = run_cross_validation(X, y, n_neigh, n_comp, input_metric, k=k_folds)
+        mean_acc = np.mean(scores)
+        results.append((n_comp, n_neigh, mean_acc))
+
+    # Convert results to numpy array for plotting
+    results = np.array(results)
+    best_idx = np.argmax(results[:, 2])
+    best_n_comp = int(results[best_idx, 0])
+    best_n_neigh = int(results[best_idx, 1])
+    best_acc = results[best_idx, 2]
+
+    print(f"\nBest parameters: n_components = {best_n_comp}, n_neighbours = {best_n_neigh} → Accuracy = {best_acc:.4f}")
+
+    # Plot accuracy heatmap
+    acc_matrix = np.zeros((len(n_components_list), len(n_neighbours_list)))
+    for i, n_comp in enumerate(n_components_list):
+        for j, n_neigh in enumerate(n_neighbours_list):
+            acc = next((acc for c, n, acc in results if c == n_comp and n == n_neigh), 0)
+            acc_matrix[i, j] = acc
+
+    plt.figure(figsize=(10, 6))
+    sns.heatmap(acc_matrix, annot=True, xticklabels=n_neighbours_list, yticklabels=n_components_list, cmap='viridis')
+    plt.xlabel("n_neighbours")
+    plt.ylabel("n_components")
+    plt.title("Accuracy Heatmap (Cross-Validation)")
+    plt.show()
+
+    return best_n_neigh, best_n_comp
+
+
+# --- Main ---
+if __name__ == "__main__":
+    
+    input_metric = 'euclidean'
+
+    # Load Salinas-A data & PCA projection
+    X, y, full_labels = load_salinas_A()
+    print("Shape of Salinas-A loaded:", X.shape, y.shape) # 7138 values of 204 spectral components
     plot_pca_projection(X, y, title="Salinas-A PCA Projection")
 
-    n_neighbors = 30
-    n_components = 25
+    # Look for the best parameters
+    #n_neighbours, n_components = best_parameters(X, y, input_metric, k_folds=5) : best = 27 (neighbours), 26 (components)
+    n_neighbours = 27
+    n_components = 26
 
+    # Cross validation, benchmark & confusion matrix
     print("\n--- Cross-validation ---")
-    run_cross_validation(X, y, k=3, n_neighbors=3)
+    run_cross_validation(X, y, n_neighbours, n_components, input_metric, k=5)
 
     print("\n--- Benchmark ---")
     X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y, test_size=0.2, random_state=42)
-    acc, y_pred = benchmark_training_prediction(X_train, y_train, X_test, y_test, n_neighbors=30)
+    acc, y_pred = benchmark_training_prediction(X_train, y_train, X_test, y_test, n_neighbours, n_components, input_metric)
 
     print("\n--- Confusion Matrix ---")
     plot_confusion_matrix(y_test, y_pred)
 
-    # --- Image des prédictions et des vrais labels ---
+    # Comparison maps
     mask = full_labels.reshape(-1) > 0
     predicted_full = np.zeros(full_labels.shape, dtype=int)
-    R, T = select_reference_points(X, y)
-    Bb = train_mlm(X, y, R, T)
-    predicted_all = predict_mlm(X, T, R, Bb, n_neighbors=30)
+    R, T = select_reference_points(X, y, n_components)
+    Bb = train_mlm(X, y, R, T, input_metric)
+    predicted_all = predict_mlm(X, T, R, Bb, n_neighbours, input_metric)
     predicted_full[mask.reshape(full_labels.shape)] = predicted_all.reshape(-1)
 
     class_values = np.array([1, 10, 11, 12, 13, 14])
