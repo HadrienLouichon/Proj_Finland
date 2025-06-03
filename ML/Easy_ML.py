@@ -173,7 +173,7 @@ if __name__ == "__main__":
     n_components = 25
 
     print("\n--- Cross-validation ---")
-    run_cross_validation(X, y, k=3, n_neighbors=3)
+    run_cross_validation(X, y, k=3, n_neighbors=30)
 
     print("\n--- Benchmark ---")
     X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y, test_size=0.2, random_state=42)
