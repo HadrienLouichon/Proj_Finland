@@ -6,7 +6,7 @@ import time
 
 from scipy.ndimage import rotate
 from sklearn.decomposition import PCA
-from sklearn.metrics import pairwise_distances, accuracy_score, confusion_matrix
+from sklearn.metrics import accuracy_score, confusion_matrix, euclidean_distances
 from sklearn.model_selection import train_test_split, StratifiedKFold
 from sklearn.preprocessing import LabelEncoder
 from scipy.stats import mode
@@ -51,13 +51,13 @@ def select_reference_points(X_train, y_train, n_components):
     return np.array(R), np.array(T)
 
 # --- MLM Training phase ---
-def train_mlm(X, y, R, T, input_metric):
+def train_mlm(X, y, R, T):
     y = y.astype(float) # Convert labels to float for distance calculations
     T = T.astype(float)
     
-    Distance_out = pairwise_distances(y[:, np.newaxis], T[:, np.newaxis], metric=input_metric) # Output distances
+    Distance_out = euclidean_distances(y[:, np.newaxis], T[:, np.newaxis]) # Output distances
     #print("Output distances shape:", Distance_out.shape)
-    Distance_in = pairwise_distances(X, R, metric=input_metric) # Input distances
+    Distance_in = euclidean_distances(X, R) # Input distances
     #print("Input distances shape:", Distance_in.shape)
     
     # Approximation of the coefficients using OLS.
@@ -67,8 +67,8 @@ def train_mlm(X, y, R, T, input_metric):
     return B
 
 # --- MLM prediction phase ---
-def predict_mlm(X_new, T, R, B, n_neighbours, input_metric):
-    D_new = pairwise_distances(X_new, R, metric=input_metric) # New distances between new data and R.
+def predict_mlm(X_new, T, R, B, n_neighbours):
+    D_new = euclidean_distances(X_new, R) # New distances between new data and R.
     
     # Solve the equation : 
     delta = D_new.dot(B)
@@ -97,15 +97,15 @@ def plot_pca_projection(X, y, title='PCA Projection'):
     plt.show()
 
 # --- Cross-validation ---
-def run_cross_validation(X, y, X_aug, Y_aug, n_neighbours, n_components, input_metric, k=5):
+def run_cross_validation(X, y, X_aug, Y_aug, n_neighbours, n_components, k=5):
     skf = StratifiedKFold(n_splits=k, shuffle=True, random_state=42)
     acc_scores = []
 
     for train_index, test_index in skf.split(X, y):
         X_test, y_test = X[test_index], y[test_index]
         R, T = select_reference_points(X_aug, Y_aug, n_components)
-        B = train_mlm(X_aug, Y_aug, R, T, input_metric)
-        y_pred = predict_mlm(X_test, T, R, B, n_neighbours, input_metric)
+        B = train_mlm(X_aug, Y_aug, R, T)
+        y_pred = predict_mlm(X_test, T, R, B, n_neighbours)
         
         acc = accuracy_score(y_test, y_pred)
         acc_scores.append(acc)
@@ -125,14 +125,14 @@ def plot_confusion_matrix(y_true, y_pred):
     plt.show()
 
 # --- Benchmark training ---
-def benchmark_training_prediction(X_train, y_train, X_test, y_test, X_aug, Y_aug, n_neighbours, n_components, input_metric):
+def benchmark_training_prediction(X_train, y_train, X_test, y_test, X_aug, Y_aug, n_neighbours, n_components):
     start_train = time.time()
     R, T = select_reference_points(X_aug, Y_aug, n_components)
-    B = train_mlm(X_aug, Y_aug, R, T, input_metric)
+    B = train_mlm(X_aug, Y_aug, R, T)
     end_train = time.time()
 
     start_pred = time.time()
-    y_pred = predict_mlm(X_test, T, R, B, n_neighbours, input_metric)
+    y_pred = predict_mlm(X_test, T, R, B, n_neighbours)
     end_pred = time.time()
 
     acc = accuracy_score(y_test, y_pred)
@@ -277,11 +277,11 @@ if __name__ == "__main__":
 
     # Cross validation, benchmark & confusion matrix
     print("\n--- Cross-validation ---")
-    run_cross_validation(X, y, X_aug, Y_aug, n_neighbours, n_components, input_metric, k=5)
+    run_cross_validation(X, y, X_aug, Y_aug, n_neighbours, n_components, k=5)
 
     print("\n--- Benchmark ---")
     X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y, test_size=0.2, random_state=42)
-    acc, y_pred = benchmark_training_prediction(X_train, y_train, X_test, y_test, X_aug, Y_aug, n_neighbours, n_components, input_metric)
+    acc, y_pred = benchmark_training_prediction(X_train, y_train, X_test, y_test, X_aug, Y_aug, n_neighbours, n_components)
 
     print("\n--- Confusion Matrix ---")
     plot_confusion_matrix(y_test, y_pred)
@@ -290,8 +290,8 @@ if __name__ == "__main__":
     mask = full_labels.reshape(-1) > 0
     predicted_full = np.zeros(full_labels.shape, dtype=int)
     R, T = select_reference_points(X, y, n_components)
-    B = train_mlm(X_aug, Y_aug, R, T, input_metric)
-    predicted_all = predict_mlm(X, T, R, B, n_neighbours, input_metric)
+    B = train_mlm(X_aug, Y_aug, R, T)
+    predicted_all = predict_mlm(X, T, R, B, n_neighbours)
     predicted_full[mask.reshape(full_labels.shape)] = predicted_all.reshape(-1)
 
     class_values = np.array([1, 10, 11, 12, 13, 14])
