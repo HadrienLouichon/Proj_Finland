@@ -138,7 +138,7 @@ def plot_comparison_maps(true_labels, pred_labels, shape, class_names=None, clas
     fig, axes = plt.subplots(1, 3, figsize=(18, 6))
 
     if class_colors is not None:
-        cmap = ListedColormap(class_colors)
+        cmap = 'tab20'
     else:
         cmap = 'tab20'
 
@@ -192,6 +192,6 @@ if __name__ == "__main__":
 
     class_values = np.array([1, 10, 11, 12, 13, 14])
     class_names = ["Brocoli", "Corn", "Lettuce4wk", "Lettuce5wk", "Lettuce6wk", "Lettuce7wk"]
-    class_colors = ['#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4']
+    class_colors = ['#1F77B4', '#F7B6D2', '#C7C7C7', '#BCBD22', '#17BECF', '#9EDAE5']
 
     plot_comparison_maps(full_labels, predicted_full, full_labels.shape, class_names=class_names, class_colors=class_colors, class_values=class_values)
