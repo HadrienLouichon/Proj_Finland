@@ -232,7 +232,7 @@ def augment_image(image, labels, angle=90, saturation_factor=1.0, brightness_off
 
     return rotated.astype(np.uint16), rotated_labels.astype(np.int32)
 
-# --- Appliquer plusieurs augmentations ---
+# --- Apply many augmentations ---
 def generate_augmented_dataset(original_image, original_labels):
     angles = [0, 90, 180, 270]
     saturations = [0.9, 1.0, 1.1]
