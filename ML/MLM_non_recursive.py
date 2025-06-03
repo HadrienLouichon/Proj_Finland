@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import time
 
+from scipy.ndimage import rotate
 from sklearn.decomposition import PCA
 from sklearn.metrics import pairwise_distances, accuracy_score, confusion_matrix
 from sklearn.model_selection import train_test_split, StratifiedKFold
@@ -25,7 +26,7 @@ def load_salinas_A():
     y = labels.reshape(-1)
 
     mask = y > 0  # remove background (label 0)
-    return X[mask], y[mask], labels 
+    return X[mask], y[mask], labels, data
 
 # --- Reference points selection ---
 def select_reference_points(X_train, y_train, n_components):
@@ -96,16 +97,14 @@ def plot_pca_projection(X, y, title='PCA Projection'):
     plt.show()
 
 # --- Cross-validation ---
-def run_cross_validation(X, y, n_neighbours, n_components, input_metric, k=5):
+def run_cross_validation(X, y, X_aug, Y_aug, n_neighbours, n_components, input_metric, k=5):
     skf = StratifiedKFold(n_splits=k, shuffle=True, random_state=42)
     acc_scores = []
 
     for train_index, test_index in skf.split(X, y):
-        X_train, X_test = X[train_index], X[test_index]
-        y_train, y_test = y[train_index], y[test_index]
-        
-        R, T = select_reference_points(X_train, y_train, n_components)
-        B = train_mlm(X_train, y_train, R, T, input_metric)
+        X_test, y_test = X[test_index], y[test_index]
+        R, T = select_reference_points(X_aug, Y_aug, n_components)
+        B = train_mlm(X_aug, Y_aug, R, T, input_metric)
         y_pred = predict_mlm(X_test, T, R, B, n_neighbours, input_metric)
         
         acc = accuracy_score(y_test, y_pred)
@@ -126,10 +125,10 @@ def plot_confusion_matrix(y_true, y_pred):
     plt.show()
 
 # --- Benchmark training ---
-def benchmark_training_prediction(X_train, y_train, X_test, y_test, n_neighbours, n_components, input_metric):
+def benchmark_training_prediction(X_train, y_train, X_test, y_test, X_aug, Y_aug, n_neighbours, n_components, input_metric):
     start_train = time.time()
-    R, T = select_reference_points(X_train, y_train, n_components)
-    B = train_mlm(X_train, y_train, R, T, input_metric)
+    R, T = select_reference_points(X_aug, Y_aug, n_components)
+    B = train_mlm(X_aug, Y_aug, R, T, input_metric)
     end_train = time.time()
 
     start_pred = time.time()
@@ -151,8 +150,6 @@ def plot_comparison_maps(true_labels, pred_labels, shape, class_names, class_col
     fig, axes = plt.subplots(1, 3, figsize=(18, 6))
 
     if class_colors is not None:
-        cmap = ListedColormap(class_colors)
-    else:
         cmap = 'tab20'
 
     im0 = axes[0].imshow(true_reshaped, cmap=cmap, vmin=min(class_values), vmax=max(class_values))
@@ -174,16 +171,16 @@ def plot_comparison_maps(true_labels, pred_labels, shape, class_names, class_col
     plt.tight_layout()
     plt.show()
 
-def best_parameters(X, y, input_metric, k_folds=5):
+def best_parameters(X, y, X_aug, Y_aug, input_metric, iteration, k_folds=3):
     
-    n_components_list = [i for i in range(1,30)]
-    n_neighbours_list = [i for i in range(1,30)]
+    n_components_list = [i for i in range(1,iteration)]
+    n_neighbours_list = [i for i in range(1,iteration)]
     print(n_components_list, n_neighbours_list)
 
     results = []
     for n_comp, n_neigh in product(n_components_list, n_neighbours_list):
         print(f"Testing n_components = {n_comp}, n_neighbours = {n_neigh}")
-        scores = run_cross_validation(X, y, n_neigh, n_comp, input_metric, k=k_folds)
+        scores = run_cross_validation(X, y, X_aug, Y_aug, n_neigh, n_comp, input_metric, k=k_folds)
         mean_acc = np.mean(scores)
         results.append((n_comp, n_neigh, mean_acc))
 
@@ -212,6 +209,53 @@ def best_parameters(X, y, input_metric, k_folds=5):
 
     return best_n_neigh, best_n_comp
 
+# --- Data augmentation pour image hyperspectrale ---
+def augment_image(image, labels, angle=90, saturation_factor=1.0, brightness_offset=0.0):
+    augmented_image = image.copy().astype(np.float32)
+    augmented_labels = labels.copy()
+
+    # Rotation (par tranche spectrale)
+    rotated = np.stack([rotate(augmented_image[:, :, i], angle, reshape=False, mode='nearest')
+                        for i in range(augmented_image.shape[-1])], axis=-1)
+
+    # Saturation : multiplicateur global par bande
+    rotated *= saturation_factor
+
+    # Décalage de luminosité : ajout d'un offset par pixel
+    rotated += brightness_offset
+
+    # Rotation des labels pour rester cohérent avec l'image
+    rotated_labels = rotate(augmented_labels, angle, reshape=False, order=0, mode='nearest')
+
+    # Clip pour rester dans les valeurs valides
+    rotated = np.clip(rotated, 0, 65535)  # Plage typique uint16
+
+    return rotated.astype(np.uint16), rotated_labels.astype(np.int32)
+
+# --- Appliquer plusieurs augmentations ---
+def generate_augmented_dataset(original_image, original_labels):
+    angles = [0, 90, 180, 270]
+    saturations = [0.9, 1.0, 1.1]
+    brightness = [-100, 0, 100]
+
+    X_list = []
+    y_list = []
+
+    for angle in angles:
+        for sat in saturations:
+            for b in brightness:
+                aug_img, aug_lbl = augment_image(original_image, original_labels, angle=angle, saturation_factor=sat, brightness_offset=b)
+                X = aug_img.reshape(-1, aug_img.shape[-1])
+                y = aug_lbl.reshape(-1)
+                mask = y > 0
+                X_list.append(X[mask])
+                y_list.append(y[mask])
+                print(f"Augmentation: angle={angle}, saturation={sat}, brightness={b}, samples={np.sum(mask)}")
+
+    X_augmented = np.vstack(X_list)
+    y_augmented = np.hstack(y_list)
+    mask = y_augmented > 0  # Remove background
+    return X_augmented[mask], y_augmented[mask]
 
 # --- Main ---
 if __name__ == "__main__":
@@ -219,22 +263,25 @@ if __name__ == "__main__":
     input_metric = 'euclidean'
 
     # Load Salinas-A data & PCA projection
-    X, y, full_labels = load_salinas_A()
+    X, y, full_labels, data = load_salinas_A()
     print("Shape of Salinas-A loaded:", X.shape, y.shape) # 7138 values of 204 spectral components
     plot_pca_projection(X, y, title="Salinas-A PCA Projection")
 
+    X_aug, Y_aug = generate_augmented_dataset(data, full_labels)
+    print("Shape of augmented data:", X_aug.shape, Y_aug.shape) # Augmented data shape
+
     # Look for the best parameters
-    #n_neighbours, n_components = best_parameters(X, y, input_metric, k_folds=5) : best = 27 (neighbours), 26 (components)
+    #n_neighbours, n_components = best_parameters(X, y, X_aug, Y_aug, input_metric, 40, k_folds=3) #: best = 27 (neighbours), 26 (components)
     n_neighbours = 27
     n_components = 26
 
     # Cross validation, benchmark & confusion matrix
     print("\n--- Cross-validation ---")
-    run_cross_validation(X, y, n_neighbours, n_components, input_metric, k=5)
+    run_cross_validation(X, y, X_aug, Y_aug, n_neighbours, n_components, input_metric, k=5)
 
     print("\n--- Benchmark ---")
     X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y, test_size=0.2, random_state=42)
-    acc, y_pred = benchmark_training_prediction(X_train, y_train, X_test, y_test, n_neighbours, n_components, input_metric)
+    acc, y_pred = benchmark_training_prediction(X_train, y_train, X_test, y_test, X_aug, Y_aug, n_neighbours, n_components, input_metric)
 
     print("\n--- Confusion Matrix ---")
     plot_confusion_matrix(y_test, y_pred)
@@ -243,12 +290,12 @@ if __name__ == "__main__":
     mask = full_labels.reshape(-1) > 0
     predicted_full = np.zeros(full_labels.shape, dtype=int)
     R, T = select_reference_points(X, y, n_components)
-    Bb = train_mlm(X, y, R, T, input_metric)
-    predicted_all = predict_mlm(X, T, R, Bb, n_neighbours, input_metric)
+    B = train_mlm(X_aug, Y_aug, R, T, input_metric)
+    predicted_all = predict_mlm(X, T, R, B, n_neighbours, input_metric)
     predicted_full[mask.reshape(full_labels.shape)] = predicted_all.reshape(-1)
 
     class_values = np.array([1, 10, 11, 12, 13, 14])
     class_names = ["Brocoli", "Corn", "Lettuce4wk", "Lettuce5wk", "Lettuce6wk", "Lettuce7wk"]
-    class_colors = ['#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4']
+    class_colors = ['#1F77B4', '#F7B6D2', '#C7C7C7', '#BCBD22', '#17BECF', '#9EDAE5']
 
     plot_comparison_maps(full_labels, predicted_full, full_labels.shape, class_names=class_names, class_colors=class_colors, class_values=class_values)
