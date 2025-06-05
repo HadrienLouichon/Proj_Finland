@@ -1,4 +1,8 @@
 import numpy as np
+import scipy.io
+import matplotlib.pyplot as plt
+import seaborn as sns
+import time
 from scipy.io import loadmat
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, confusion_matrix
@@ -7,23 +11,48 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import os
 
-# Chargement des données hyperspectrales
-def load_salinas(path_X, path_Y):
-    X_data = loadmat(path_X)["salinasA_corrected"]
-    Y_data = loadmat(path_Y)["salinasA_gt"]
-    X = X_data.reshape(-1, X_data.shape[2])
-    Y = Y_data.reshape(-1)
-    return X, Y
+# --- Load Salinas-A data ---
+def load_salinas_A():
+    data = scipy.io.loadmat('ML/SalinasA_corrected.mat')['salinasA_corrected']
+    #print(data)
+    #print("Shape of Salinas-A data:", data.shape)
+    labels = scipy.io.loadmat('ML/SalinasA_gt.mat')['salinasA_gt']
+    #print(labels)
+    #print("Shape of Salinas-A labels:", labels.shape)
+    
+    # Separate training and testing data, each 3rd row for training, the others for testing
+    training_data = data[::3, :, :]
+    training_labels = labels[::3, :]
+    mask = np.ones(data.shape[0], dtype=bool)
+    mask[::3] = False
+    testing_data = data[mask, :, :]
+    testing_labels = labels[mask, :]
+    #print("Training data shape:", training_data.shape)
+    #print("Testing data shape:", testing_data.shape)
+    #print("Training labels shape:", training_labels.shape)
+    #print("Testing labels shape:", testing_labels.shape)
+    return training_data, training_labels, testing_data, testing_labels
 
 # Sélection aléatoire de K points de référence par classe
-def select_reference_points(X, Y, K=5):
-    classes = np.unique(Y[Y > 0])
-    indices = []
-    for cls in classes:
-        cls_idx = np.where(Y == cls)[0]
-        chosen = np.random.choice(cls_idx, K, replace=False)
-        indices.extend(chosen)
-    return indices
+def select_reference_points(training_data, training_labels):
+    classes = np.unique(training_labels[training_labels > 0])
+    #print(classes)
+    #print(type(classes))
+    R = [] # Reference points, 3 per classes selected randomly
+    T = [] # Labels of reference points
+
+    for label in classes:
+        class_indices = np.where(training_labels == label)[0] # Indices of the current class
+        if len(class_indices) < 3:
+            raise ValueError(f"Not enough points for the class {label}.")
+        chosen_indices = np.random.choice(class_indices, size=3, replace=False)
+        R.extend(training_data[chosen_indices])
+        T.extend([label] * 3)
+    #print("Reference points selected:", len(R))
+    #print(R)
+    #print(type(T[0]))
+    return np.array(R), np.array(T)
+
 
 # Construction des matrices de distance
 def build_distance_matrices(X, ref_indices, Y, T_labels):
@@ -112,4 +141,6 @@ def main_rls_pipeline(path_X, path_Y, K_ref=5, test_size=0.2, n_updates=20):
 
 # Lancer le programme
 if __name__ == "__main__":
-    main_rls_pipeline("ML/SalinasA_corrected.mat", "ML/SalinasA_gt.mat")
+    #main_rls_pipeline("ML/SalinasA_corrected.mat", "ML/SalinasA_gt.mat")
+    training_data, training_labels, testing_data, testing_labels = load_salinas_A()
+    select_reference_points(training_data, training_labels)
