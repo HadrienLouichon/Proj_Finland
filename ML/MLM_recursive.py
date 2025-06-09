@@ -8,6 +8,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, confusion_matrix
 from sklearn.metrics import euclidean_distances
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 import seaborn as sns
 import os
 
@@ -119,6 +120,36 @@ def plot_confusion_matrix(y_true, y_pred):
     plt.ylabel("Actual")
     plt.show()
 
+# --- Comparison maps with color to differiate the labels ---
+def plot_comparison_maps(true_labels, pred_labels, shape, class_names, class_colors, class_values):
+    true_reshaped = true_labels.reshape(shape)
+    pred_reshaped = pred_labels.reshape(shape)
+    errors = (true_reshaped != pred_reshaped) & (true_reshaped != 0)
+
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+
+    if class_colors is not None:
+        cmap = 'tab20'
+
+    im0 = axes[0].imshow(true_reshaped, cmap=cmap, vmin=min(class_values), vmax=max(class_values))
+    axes[0].set_title("Ground Truth")
+    axes[0].axis('off')
+
+    im1 = axes[1].imshow(pred_reshaped, cmap=cmap, vmin=min(class_values), vmax=max(class_values))
+    axes[1].set_title("Predicted Labels")
+    axes[1].axis('off')
+
+    im2 = axes[2].imshow(errors, cmap='Reds')
+    axes[2].set_title("Prediction Errors")
+    axes[2].axis('off')
+
+    if class_names and class_colors:
+        patches = [Patch(color=color, label=label) for color, label in zip(class_colors, class_names)]
+        fig.legend(handles=patches, loc='lower center', ncol=6)
+
+    plt.tight_layout()
+    plt.show()
+
 # Main function to run the RLS model
 if __name__ == "__main__":
     # Load the Salinas-A dataset
@@ -133,20 +164,37 @@ if __name__ == "__main__":
     Distance_out, Distance_in = build_distance_matrices(training_data, R, training_labels, T)
     # Initialize the RLS model
     P, B = rls_initialization(Distance_out, Distance_in)
+     #print(testing_data.shape)
     
-    #print(testing_data.shape)
     predictions = []
     for i in range(testing_data.shape[0]):
         data = testing_data[i]
         label = testing_labels[i]
-        data, label = reshape_data(data, label)
-        # Make predictions for the current data point
-        predicted_label = predict_label(data, R, T, B)
-        predictions.append(predicted_label)
-        # Update the RLS model with new data
-        New_distance_out, New_distance_in = build_distance_matrices(data, R, label, T)
-        P, B = rls_update(New_distance_out, New_distance_in, P, B)
-    
-    #plot_confusion_matrix(testing_labels.flatten(), np.array(predictions).flatten())
+        if label != 0:
+            data, label = reshape_data(data, label)
+            # Make predictions for the current data point
+            predicted_label = predict_label(data, R, T, B)
+            predictions.append(predicted_label)
+            # Update the RLS model with new data
+            New_distance_out, New_distance_in = build_distance_matrices(data, R, label, T)
+            P, B = rls_update(New_distance_out, New_distance_in, P, B)
+        else:
+            background = np.zeros(1, dtype=np.uint8)
+            predictions.append(background)
     plot_confusion_matrix(testing_labels, np.array(predictions))
+    testing_labels = testing_labels.reshape(55,86)
+    predictions = np.array(predictions)
+    predictions.reshape(55,86)
+
+    # Comparison maps
+    #mask = testing_labels.reshape(-1) > 0
+    #predicted_full = np.zeros(testing_labels.shape, dtype=int)
+    #predicted_full[mask.reshape(testing_labels.shape)] = np.array(predictions).reshape(-1)
+
+    class_values = np.array([0, 1, 10, 11, 12, 13, 14])
+    class_names = ["Background","Brocoli", "Corn", "Lettuce4wk", "Lettuce5wk", "Lettuce6wk", "Lettuce7wk"]
+    class_colors = ['#1F77B4','#AEC7E8', '#7F7F7F', '#C7C7C7', '#BCBD22', '#17BECF', '#9EDAE5']
+
+    plot_comparison_maps(testing_labels.reshape(-1), np.array(predictions), testing_labels.shape, class_names=class_names, class_colors=class_colors, class_values=class_values)
     
+   
