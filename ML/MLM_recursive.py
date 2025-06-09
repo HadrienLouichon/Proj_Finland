@@ -21,8 +21,8 @@ def load_salinas_A():
     #print("Shape of Salinas-A labels:", labels.shape)
     
     # Remove the background : class (0)
-    #mask_background = labels > 0
-    #data[~mask_background], labels[~mask_background] = 0, 0
+    mask_background = labels > 0
+    data[~mask_background], labels[~mask_background] = 0, 0
     #print("Data shape after removing background:", data.shape)
     # Separate training and testing data, each 3rd row for training, the others for testing
     training_data = data[::3, :, :]
@@ -72,8 +72,10 @@ def build_distance_matrices(data, R, labels, T):
     labels = labels.astype(float)  
     T = T.astype(float)
 
-    Distance_out = euclidean_distances(labels[:, np.newaxis], T[:, np.newaxis])
-    Distance_in = euclidean_distances(data, R)
+    #Distance_out = euclidean_distances(labels[:, np.newaxis], T[:, np.newaxis])
+    #Distance_in = euclidean_distances(data, R)
+    Distance_out = np.array([[np.linalg.norm(l - ref_label) for ref_label in T] for l in labels])
+    Distance_in = np.array([[np.linalg.norm(d - ref_data) for ref_data in R] for d in data])
     
     #print("Distance_out shape:", Distance_out.shape)
     #print("Distance_in shape:", Distance_in.shape)
@@ -99,11 +101,23 @@ def rls_update(New_distance_out, New_distance_in, P, B):
     #print("B_new shape:", B_new.shape)
     return P_new, B_new
 
+# Predict the label for new data points
 def predict_label(X_new, R, T, B):
     Dx_new = euclidean_distances(X_new, R)
     predictions = Dx_new @ B
     predicted_labels = np.argmin(predictions, axis=1)
     return T[predicted_labels]
+
+# Confusion Matrix
+def plot_confusion_matrix(y_true, y_pred):
+    cm = confusion_matrix(y_true, y_pred)
+    
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues")
+    plt.title("Confusion Matrix")
+    plt.xlabel("Predicted")
+    plt.ylabel("Actual")
+    plt.show()
 
 # Main function to run the RLS model
 if __name__ == "__main__":
@@ -113,19 +127,26 @@ if __name__ == "__main__":
     R, T = select_reference_points(training_data, training_labels)
     # Reshape the data for distance calculations
     training_data, training_labels = reshape_data(training_data, training_labels)
-    testing_data, testing_labels = reshape_data(training_data, training_labels)
+    testing_data, testing_labels = reshape_data(testing_data, testing_labels)
     R, T = reshape_data(R, T)
     # Build the distance matrices
     Distance_out, Distance_in = build_distance_matrices(training_data, R, training_labels, T)
     # Initialize the RLS model
-    P0, B0 = rls_initialization(Distance_out, Distance_in)
-
-    for i in range(training_data.shape[0]):
-        data = training_data[i]
-        label = training_labels[i]
+    P, B = rls_initialization(Distance_out, Distance_in)
+    
+    #print(testing_data.shape)
+    predictions = []
+    for i in range(testing_data.shape[0]):
+        data = testing_data[i]
+        label = testing_labels[i]
         data, label = reshape_data(data, label)
+        # Make predictions for the current data point
+        predicted_label = predict_label(data, R, T, B)
+        predictions.append(predicted_label)
         # Update the RLS model with new data
         New_distance_out, New_distance_in = build_distance_matrices(data, R, label, T)
-        P_new, B_new = rls_update(New_distance_out, New_distance_in, P0, B0)
-    print(P_new)
-    print(B_new)
+        P, B = rls_update(New_distance_out, New_distance_in, P, B)
+    
+    #plot_confusion_matrix(testing_labels.flatten(), np.array(predictions).flatten())
+    plot_confusion_matrix(testing_labels, np.array(predictions))
+    
