@@ -2,21 +2,16 @@ import numpy as np
 import scipy.io
 import matplotlib.pyplot as plt
 import seaborn as sns
-import time
-from scipy.io import loadmat
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, confusion_matrix
-from sklearn.metrics import euclidean_distances
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 import seaborn as sns
-import os
 
 # --- Load Salinas-A data ---
 def load_salinas_A():
     data = scipy.io.loadmat('ML/SalinasA_corrected.mat')['salinasA_corrected']
     #print(data)
-    #print("Shape of Salinas-A data:", data.shape)
+    print("Shape of Salinas-A data:", data.shape)
     labels = scipy.io.loadmat('ML/SalinasA_gt.mat')['salinasA_gt']
     #print(labels)
     #print("Shape of Salinas-A labels:", labels.shape)
@@ -26,12 +21,12 @@ def load_salinas_A():
     data[~mask_background], labels[~mask_background] = 0, 0
     #print("Data shape after removing background:", data.shape)
     # Separate training and testing data, each 3rd row for training, the others for testing
-    training_data = data[:, ::3, :]
-    training_labels = labels[:, ::3]
-    mask = np.ones(data.shape[1], dtype=bool)
+    training_data = data[::3, :, :]
+    training_labels = labels[::3, :]
+    mask = np.ones(data.shape[0], dtype=bool)
     mask[::3] = False
-    testing_data = data[:, mask, :]
-    testing_labels = labels[:, mask]
+    testing_data = data[mask, :, :]
+    testing_labels = labels[mask, :]
     
     #print("Training data shape:", training_data.shape)
     #print("Testing data shape:", testing_data.shape)
@@ -178,23 +173,22 @@ if __name__ == "__main__":
     num_rows, num_cols = testing_data.shape[0], testing_data.shape[1]
     predictions_array = np.zeros((num_rows, num_cols), dtype=np.uint8)
 
-    #predictions = []
-    for i in range(testing_data.shape[1]):
+    for i in range(testing_data.shape[0]):
         print("Processing row:", i+1)
-        data = testing_data[:,i]
-        label = testing_labels[:,i]
-        for j in range(testing_data.shape[0]):
+        data = testing_data[i,:]
+        label = testing_labels[i,:]
+        for j in range(testing_data.shape[1]):
             if label[j] != 0:
                 pixel, pix_label = reshape_data(data[j], label[j])
                 # Make predictions for the current data point
                 predicted_label = predict_label(pixel, R, T, B)
-                predictions_array[j,i] = predicted_label
+                predictions_array[i,j] = predicted_label
                 #print("Label to predict:", pix_label)
                 #print("Predicted label for pixel:", predicted_label)
                 # Update the RLS model with new data
                 New_distance_out, New_distance_in = build_distance_matrices(pixel, R, pix_label, T)
                 P, B = rls_update(New_distance_out, New_distance_in, P, B)
 
-
+    print(accuracy_score(testing_labels.reshape(-1), predictions_array.reshape(-1)))
     plot_confusion_matrix(testing_labels.reshape(-1), predictions_array.reshape(-1))
     plot_comparison_maps(testing_labels, predictions_array, testing_labels.shape, class_names=class_names, class_colors=class_colors, class_values=class_values)
