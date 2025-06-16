@@ -14,7 +14,7 @@ def load_salinas_A():
     print("Shape of Salinas-A data:", data.shape)
     labels = scipy.io.loadmat('ML/SalinasA_gt.mat')['salinasA_gt']
     #print(labels)
-    #print("Shape of Salinas-A labels:", labels.shape)
+    print("Shape of Salinas-A labels:", labels.shape)
     
     # Remove the background : class (0)
     mask_background = labels > 0
@@ -28,15 +28,16 @@ def load_salinas_A():
     testing_data = data[mask, :, :]
     testing_labels = labels[mask, :]
     
-    #print("Training data shape:", training_data.shape)
-    #print("Testing data shape:", testing_data.shape)
+    print("Training data shape:", training_data.shape)
+    print("Testing data shape:", testing_data.shape)
     #print("Training labels shape:", training_labels.shape)
     #print("Testing labels shape:", testing_labels.shape)
     return training_data, training_labels, testing_data, testing_labels
 
 # Selection of the reference points (3 per class, randomly selected)
 def select_reference_points(training_data, training_labels):
-    classes = np.unique(training_labels[training_labels > 0])
+    #classes = np.unique(training_labels[training_labels > 0])
+    classes = np.unique(training_labels)
     #print(classes)
     #print(type(classes))
     R = [] # Reference points, 3 per classes selected randomly
@@ -47,11 +48,11 @@ def select_reference_points(training_data, training_labels):
         if len(class_indices) < 3:
             raise ValueError(f"Not enough points for the class {label}.")
         chosen_indices = np.random.choice(class_indices, size=3, replace=False)
-        print("Pts pour la classe :", label, "sont : ", chosen_indices)
+        print("Points for class :", label, "are : ", chosen_indices)
         R.extend(training_data[chosen_indices])
         T.extend([label, label, label])
     
-    print("Reference points selected:", len(R))
+    print("Number of reference points selected:", len(R))
     return np.array(R), np.array(T)
 
 # Reshape the data for distance calculations :
@@ -81,9 +82,9 @@ def build_distance_matrices(data, R, labels, T):
 def rls_initialization(Distance_out, Distance_in):
     P0 = np.linalg.pinv(Distance_in.T @ Distance_in)
     B0 = P0 @ Distance_in.T @ Distance_out
-    
-    print("P0 shape:", P0.shape)
-    print("B0 shape:", B0.shape)
+
+    #print("P0 shape:", P0.shape)
+    #print("B0 shape:", B0.shape)
     return P0, B0
 
 # Update the RLS model
@@ -157,18 +158,14 @@ if __name__ == "__main__":
     # Load the Salinas-A dataset
     training_data, training_labels, testing_data, testing_labels = load_salinas_A()
     training_data, training_labels = reshape_data(training_data, training_labels)
-
+    
     # Select reference points
     R, T = select_reference_points(training_data, training_labels)
     R, T = reshape_data(R, T)
     
     # Build the model from the training data
-    print("If training with all training data as distances :")
     Distance_out, Distance_in = build_distance_matrices(training_data, R, training_labels, T)
     P, B = rls_initialization(Distance_out, Distance_in)
-    
-    #print(testing_data.shape)
-    #print(testing_data[:,0].shape)
 
     num_rows, num_cols = testing_data.shape[0], testing_data.shape[1]
     predictions_array = np.zeros((num_rows, num_cols), dtype=np.uint8)
@@ -178,17 +175,22 @@ if __name__ == "__main__":
         data = testing_data[i,:]
         label = testing_labels[i,:]
         for j in range(testing_data.shape[1]):
-            if label[j] != 0:
-                pixel, pix_label = reshape_data(data[j], label[j])
-                # Make predictions for the current data point
-                predicted_label = predict_label(pixel, R, T, B)
-                predictions_array[i,j] = predicted_label
-                #print("Label to predict:", pix_label)
-                #print("Predicted label for pixel:", predicted_label)
-                # Update the RLS model with new data
-                New_distance_out, New_distance_in = build_distance_matrices(pixel, R, pix_label, T)
-                P, B = rls_update(New_distance_out, New_distance_in, P, B)
+            pixel, pix_label = reshape_data(data[j], label[j])
+            # Make predictions for the current data point
+            predicted_label = predict_label(pixel, R, T, B)
+            predictions_array[i,j] = predicted_label
+            #print("Label to predict:", pix_label)
+            #print("Predicted label for pixel:", predicted_label)
+            # Update the RLS model with new data
+        valid_pixels = label != 0
+        #print(valid_pixels)
+        data_valid = data[valid_pixels]
+        label_valid = label[valid_pixels]
+        New_distance_out, New_distance_in = build_distance_matrices(data_valid, R, label_valid, T)
+        #New_distance_out, New_distance_in = build_distance_matrices(data, R, label, T)
+        P, B = rls_update(New_distance_out, New_distance_in, P, B)
 
     print(accuracy_score(testing_labels.reshape(-1), predictions_array.reshape(-1)))
     plot_confusion_matrix(testing_labels.reshape(-1), predictions_array.reshape(-1))
     plot_comparison_maps(testing_labels, predictions_array, testing_labels.shape, class_names=class_names, class_colors=class_colors, class_values=class_values)
+
