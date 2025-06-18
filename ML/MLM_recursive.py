@@ -19,37 +19,25 @@ def load_salinas_A():
     # Remove the background : class (0)
     mask_background = labels > 0
     data[~mask_background], labels[~mask_background] = 0, 0
-    #print("Data shape after removing background:", data.shape)
-    # Separate training and testing data, each 3rd row for training, the others for testing
-    training_data = data[::3, :, :]
-    training_labels = labels[::3, :]
-    mask = np.ones(data.shape[0], dtype=bool)
-    mask[::3] = False
-    testing_data = data[mask, :, :]
-    testing_labels = labels[mask, :]
     
-    print("Training data shape:", training_data.shape)
-    print("Testing data shape:", testing_data.shape)
-    #print("Training labels shape:", training_labels.shape)
-    #print("Testing labels shape:", testing_labels.shape)
-    return training_data, training_labels, testing_data, testing_labels
+    return data, labels
 
 # Selection of the reference points (3 per class, randomly selected)
-def select_reference_points(training_data, training_labels):
+def select_random_points(data, labels):
     #classes = np.unique(training_labels[training_labels > 0])
-    classes = np.unique(training_labels)
+    classes = np.unique(labels)
     #print(classes)
     #print(type(classes))
     R = [] # Reference points, 3 per classes selected randomly
     T = [] # Labels of reference points
 
     for label in classes:
-        class_indices = np.where(training_labels == label)[0]
+        class_indices = np.where(labels == label)[0]
         if len(class_indices) < 3:
             raise ValueError(f"Not enough points for the class {label}.")
         chosen_indices = np.random.choice(class_indices, size=3, replace=False)
         print("Points for class :", label, "are : ", chosen_indices)
-        R.extend(training_data[chosen_indices])
+        R.extend(data[chosen_indices])
         T.extend([label, label, label])
     
     print("Number of reference points selected:", len(R))
@@ -156,12 +144,14 @@ if __name__ == "__main__":
     class_colors = ['#1F77B4','#AEC7E8', '#7F7F7F', '#C7C7C7', '#BCBD22', '#17BECF', '#9EDAE5']
 
     # Load the Salinas-A dataset
-    training_data, training_labels, testing_data, testing_labels = load_salinas_A()
-    training_data, training_labels = reshape_data(training_data, training_labels)
-    
-    # Select reference points
-    R, T = select_reference_points(training_data, training_labels)
-    R, T = reshape_data(R, T)
+    testing_data, testing_labels = load_salinas_A()
+    data, labels = reshape_data(testing_data, testing_labels)
+   
+    # Select random reference points
+    R, T = select_random_points(data, labels)
+    # Select random training data
+    training_data, training_labels = select_random_points(data, labels)
+    print(training_data, training_labels)
     
     # Build the model from the training data
     Distance_out, Distance_in = build_distance_matrices(training_data, R, training_labels, T)
@@ -193,4 +183,3 @@ if __name__ == "__main__":
     print(accuracy_score(testing_labels.reshape(-1), predictions_array.reshape(-1)))
     plot_confusion_matrix(testing_labels.reshape(-1), predictions_array.reshape(-1))
     plot_comparison_maps(testing_labels, predictions_array, testing_labels.shape, class_names=class_names, class_colors=class_colors, class_values=class_values)
-
