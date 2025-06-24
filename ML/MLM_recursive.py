@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import scipy.io
 import matplotlib.pyplot as plt
@@ -125,10 +126,17 @@ if __name__ == "__main__":
     # Select random training data
     training_data, training_labels = select_random_points(data, labels, n=3)
     #print(training_data, training_labels)
-    
-    # Build the model from the training data
-    Distance_out, Distance_in = build_distance_matrices(training_data, R, training_labels, T)
-    P, B = rls_initialization(Distance_out, Distance_in)
+
+    if all(os.path.exists(f) for f in ["ML/Models/B_model.npy", "ML/Models/P_model.npy"]):
+        # Load pre-trained models if they exist
+        B = np.load("ML/Models/B_model.npy")
+        P = np.load("ML/Models/P_model.npy")
+        print("Pre-trained models loaded.")
+    else:
+        # Build the model from the training data
+        Distance_out, Distance_in = build_distance_matrices(training_data, R, training_labels, T)
+        P, B = rls_initialization(Distance_out, Distance_in)
+        print("Model initialized.")
 
     num_rows, num_cols = testing_data.shape[0], testing_data.shape[1]
     predictions_array = np.zeros((num_rows, num_cols), dtype=np.uint8)
@@ -153,3 +161,7 @@ if __name__ == "__main__":
     print(accuracy_score(testing_labels.reshape(-1), predictions_array.reshape(-1)))
     plot_confusion_matrix(testing_labels.reshape(-1), predictions_array.reshape(-1))
     plot_comparison_maps(testing_labels, predictions_array, testing_labels.shape, class_names=class_names, class_colors=class_colors, class_values=class_values)
+
+    # Save the models
+    np.save("ML/Models/B_model.npy", B)
+    np.save("ML/Models/P_model.npy", P)
