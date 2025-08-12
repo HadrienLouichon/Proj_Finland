@@ -11,7 +11,7 @@ import uuid
 import json
 from io import BytesIO
 
-MQTT_BROKER = "#IP_Adress_of_the_receiver" ##<-- TO CHANGE
+MQTT_BROKER = "localhost" ##<-- TO CHANGE
 MQTT_PORT = 1883
 USE_TLS = False
 

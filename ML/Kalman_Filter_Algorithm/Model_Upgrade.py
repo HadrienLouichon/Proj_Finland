@@ -6,7 +6,7 @@ import json
 import os
 from io import BytesIO
 
-MQTT_BROKER = "#IP_Adress_of_computer"  # Adresse du broker
+MQTT_BROKER = "localhost"  # Adresse du broker
 MQTT_PORT = 1883
 USE_TLS = False
 
@@ -173,6 +173,7 @@ def kalman_fuse_update_adaptive(b_pred, P_pred, z, R, gain_norm_history, regular
     return b_new, P_new, K, log_det_P
 
 def upgrading_model(anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1, P2, gain_norms):
+
     'HERE'
     'Send data to Model_Upgrade : anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1, P2, gain_norms'
     'Receive : log_det_P, gain_norm, bhat1, bhat2, P1, P2'
@@ -226,3 +227,9 @@ def upgrading_model(anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1,
         P2 = np.copy(P_fuse)
 
     return log_det_P, gain_norm, bhat1, bhat2, P1, P2
+
+client = mqtt.Client()
+client.on_connect = on_connect
+client.on_message = on_message
+client.connect(MQTT_BROKER, MQTT_PORT, 60)
+client.loop_forever()
