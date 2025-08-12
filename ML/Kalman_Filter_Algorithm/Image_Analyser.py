@@ -10,6 +10,7 @@ import time
 import uuid
 import json
 from io import BytesIO
+import threading
 
 MQTT_BROKER = "localhost" ##<-- TO CHANGE
 MQTT_PORT = 1883
@@ -23,53 +24,48 @@ CHUNK_SIZE = 10_000_000  # 10 Mo
 ack_recu = False
 message_id_en_cours = ""
 feedback_vars = {}
+lock = threading.Lock()
 
 #------MQTT-------#
 
-def on_message(client, userdata, msg): #Check pour le type des variables reçues. Devrait pouvoir gérer les actualisations.
-    global ack_recu
+def on_message(client, userdata, msg):
+    global ack_recu, feedback_vars
     ack = json.loads(msg.payload.decode('utf-8'))
     if ack.get("id") == message_id_en_cours:
-        ack_recu = True
-        print(f"[RECEIVER] '{ack.get('status')}' → variables bien reçues.")
-        if "extra_data" in ack:
-            for k, v in ack["extra_data"].items():
-                if k.startswith("np_"):
-                    feedback_vars[k].update(decode_variable(v, as_numpy=True))
-                else:
-                    feedback_vars[k].update(decode_variable(v, as_numpy=False))
+        with lock:
+            ack_recu = True
+            print(f"[RECEIVER] '{ack.get('status')}' → variables bien reçues.")
+            if "extra_data" in ack:
+                decoded_fb = {}
+                for k, v in ack["extra_data"].items():
+                    # On détecte si c'est un tableau NumPy
+                    try:
+                        decoded_fb[k] = decode_variable(v)
+                    except Exception:
+                        decoded_fb[k] = decode_variable(v)
+                feedback_vars = decoded_fb  # Remplace entièrement
 
 def encode_variable(var):
-    """Encode une variable Python/NumPy en bytes base64."""
     buf = BytesIO()
-    if isinstance(var, np.ndarray):
-        np.save(buf, var)  # sauvegarde binaire NumPy
-    else:
-        # pour int, float, bool, str, dict, list → JSON
-        buf.write(json.dumps(var).encode("utf-8"))
+    np.save(buf, var)
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
-def decode_variable(b64_str, as_numpy=False):
-    raw = base64.b64decode(b64_str)
-    buf = BytesIO(raw)
-    if as_numpy:
-        return np.load(buf)
-    else:
-        return json.loads(raw.decode("utf-8"))
+def decode_variable(b64_str):
+    buf = BytesIO(base64.b64decode(b64_str))
+    return np.load(buf, allow_pickle=True)
 
 def send_variables(variables, client):
     global message_id_en_cours, ack_recu
-    ack_recu = False
+    with lock:
+        ack_recu = False
     message_id = str(uuid.uuid4())
     message_id_en_cours = message_id
 
-    # On sérialise toutes les variables dans un seul objet JSON
     vars_payload = {f"var{i+1}": encode_variable(v) for i, v in enumerate(variables)}
-
     data_bytes = json.dumps(vars_payload).encode("utf-8")
     total_chunks = (len(data_bytes) + CHUNK_SIZE - 1) // CHUNK_SIZE
 
-    print(f"\n📤 Envoi de 10 variables ({len(data_bytes)} octets) en {total_chunks} chunk(s)...")
+    print(f"\n📤 Envoi de {len(variables)} variables ({len(data_bytes)} octets) en {total_chunks} chunk(s)...")
 
     for i in range(total_chunks):
         chunk = data_bytes[i * CHUNK_SIZE: (i + 1) * CHUNK_SIZE]
@@ -79,22 +75,31 @@ def send_variables(variables, client):
             "total_chunks": total_chunks,
             "data": base64.b64encode(chunk).decode("utf-8")
         }
-        max_try = 3
-        for Try in range(1, max_try + 1):
-            print(f"[TRANSMITTER] Chunk {i+1}/{total_chunks} - Essai {Try}")
-            client.publish(TOPIC_Data, json.dumps(payload))
-            time.sleep(0.1)
+        client.publish(TOPIC_Data, json.dumps(payload))
+        time.sleep(0.05)
 
-            for _ in range(10):  # timeout 5 sec
-                if ack_recu:
-                    break
-                time.sleep(0.5)
-
+    # Attendre l'ACK complet
+    print("[TRANSMITTER] En attente de l'ACK complet...")
+    timeout = time.time() + 5  # 5 secondes max
+    while True:
+        with lock:
             if ack_recu:
-                print(f"[RECEIVER] Variables envoyées avec succès.")
-                break
-            else:
-                print(f"[RECEIVER] Pas d'ACK, nouvel essai...")
+                print("[TRANSMITTER] ✅ ACK reçu.")
+                return True
+        if time.time() > timeout:
+            print("[TRANSMITTER] ❌ Timeout en attente de l'ACK.")
+            return False
+        time.sleep(0.1)
+
+def attendre_feedback(timeout=5):
+    """Attend que ack_recu soit True et que feedback_vars contienne des données."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        with lock:
+            if ack_recu and feedback_vars:
+                return dict(feedback_vars)  # retourne une copie
+        time.sleep(0.05)
+    return None
 
 #------IMAGE-------#
 
@@ -241,6 +246,8 @@ def compute_metrics(y_true, y_pred, valid_idx):
 def run_simulation(x_train, y_train, x_test, y_test, R, y_R, uav1_rows, uav2_rows,anom_threshold_b,anom_threshold_u, client):
     
     global feedback_vars
+    log_det_P = None
+    gain_norm = None
     
     H_train, W_train, bands = x_train.shape
     H_test, W_test, _ = x_test.shape
@@ -360,22 +367,35 @@ def run_simulation(x_train, y_train, x_test, y_test, R, y_R, uav1_rows, uav2_row
 
 
 
+
         #'HERE'
         #'Send data to Model_Upgrade : anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1, P2, gain_norms'
         #'Receive : log_det_P, gain_norm, bhat1, bhat2, P1, P2'
-        send_variables([anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1, P2, gain_norms], client)
-        print("[MAIN] Variables reçues depuis le feedback :")
-        for k, v in feedback_vars.items():
-            log_det_P = v[0]
-            gain_norm = v[1]
-            bhat1 = v[2]
-            bhat2 = v[3]
-            P1 = v[4]
-            P2 = v[5]
+        #to_send = [anomscore1.copy(), anomscore2.copy(), b_fuse.copy(), P_fuse.copy(), Q.copy(), bhat1.copy(), bhat2.copy(), P1.copy(), P2.copy(), gain_norms.copy(), log_det_P_trace.copy()]
+        to_send = [anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1, P2, gain_norms, log_det_P_trace]
+        Send = send_variables(to_send, client)
+        if Send:
+            fb = attendre_feedback(timeout=5)
+            if fb: 
+                log_det_P = np.float64(fb.get("log_det_P", log_det_P))
+                gain_norm = np.float64(fb.get("gain_norm", gain_norm))
+                bhat1 = np.array(fb.get("bhat1", bhat1))
+                bhat2 = np.array(fb.get("bhat2", bhat2))
+                P1 = np.array(fb.get("P1", P1))
+                P2 = np.array(fb.get("P2", P2))
+                b_fuse = np.array(fb.get("b_fuse", b_fuse))
+                P_fuse = np.array(fb.get("P_fuse", P_fuse))
+                Q = np.array(fb.get("Q", Q))
+        else:
+            print("[MAIN] Aucun feedback reçu, on continue avec les anciens modèles.")
 
-
-
+        log_det_P_trace.append(log_det_P)
+        gain_norms.append(gain_norm)
+        
         models['base'].append(b_fuse)
+
+
+
 
         # Predict after merge
         pred1a, astmp = predict_model(bhat1, x_test_flat, R, y_R,n)
@@ -436,14 +456,14 @@ def run_simulation(x_train, y_train, x_test, y_test, R, y_R, uav1_rows, uav2_row
 
     # Determinant of Kalman covariance
     plt.figure(figsize=(10, 4))
-    #plt.plot(det_P_trace)
+    plt.plot(log_det_P_trace)
     plt.title("Determinant of Kalman covariance matrix P over time")
     plt.xlabel("Update step")
     plt.ylabel("det(P)")
     plt.grid(True)
     plt.tight_layout()
     plt.show()
-
+    print(log_det_P_trace, gain_norms)
     return metrics, test_results, train_res, models
 
 def main():

@@ -18,20 +18,13 @@ received_vars = {}
 
 #------MQTT-------#
 
-def decode_variable(b64_str, as_numpy=False):
-    raw = base64.b64decode(b64_str)
-    buf = BytesIO(raw)
-    if as_numpy:
-        return np.load(buf)
-    else:
-        return json.loads(raw.decode("utf-8"))
+def decode_variable(b64_str):
+    buf = BytesIO(base64.b64decode(b64_str))
+    return np.load(buf, allow_pickle=True)
 
 def encode_variable(var):
     buf = BytesIO()
-    if isinstance(var, np.ndarray):
-        np.save(buf, var)
-    else:
-        buf.write(json.dumps(var).encode("utf-8"))
+    np.save(buf, var)
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 def on_connect(client, userdata, flags, rc):
@@ -47,50 +40,44 @@ def on_message(client, userdata, msg):
         data = base64.b64decode(payload["data"])
 
         if message_id not in buffers:
-            buffers[message_id] = {
-                "chunks": {},
-                "total": total_chunks
-            }
+            buffers[message_id] = {"chunks": {}, "total": total_chunks}
 
         buffers[message_id]["chunks"][chunk_id] = data
         print(f"[RECEIVER] Chunk {chunk_id+1}/{total_chunks} received.")
 
-        # Reconstruction complète
+        # Reconstruction
         if len(buffers[message_id]["chunks"]) == total_chunks:
             full_data = b"".join(buffers[message_id]["chunks"][i] for i in range(total_chunks))
-            del buffers[message_id]  # Nettoyage
+            del buffers[message_id]
 
-            # Décodage des variables
             vars_payload = json.loads(full_data.decode("utf-8"))
-            for k, v in vars_payload.items():
-                if k.startswith("np_") or k.startswith("var") and "array" in str(type(v)).lower():
-                    received_vars[k] = decode_variable(v, as_numpy=True)
-                else:
-                    received_vars[k] = decode_variable(v, as_numpy=False)
+            # Récupération explicite dans l'ordre attendu
+            anomscore1 = np.array(decode_variable(vars_payload["var1"]))
+            anomscore2 = np.array(decode_variable(vars_payload["var2"]))
+            b_fuse     = np.array(decode_variable(vars_payload["var3"]))
+            P_fuse     = np.array(decode_variable(vars_payload["var4"]))
+            Q          = np.array(decode_variable(vars_payload["var5"]))
+            bhat1      = np.array(decode_variable(vars_payload["var6"]))
+            bhat2      = np.array(decode_variable(vars_payload["var7"]))
+            P1         = np.array(decode_variable(vars_payload["var8"]))
+            P2         = np.array(decode_variable(vars_payload["var9"]))
+            gain_norms = list(decode_variable(vars_payload["var10"]))
+            log_det_P_trace = list(decode_variable(vars_payload["var11"]))
 
-            for k, v in received_vars.items():
-                anomscore1 = v[0]
-                anomscore2 = v[1]
-                b_fuse = v[2]
-                P_fuse = v[3]
-                Q = v[4]
-                bhat1 = v[5]
-                bhat2 = v[6]
-                P1 = v[7]
-                P2 = v[8]
-                gain_norms = v[9]
+            log_det_P, gain_norm, bhat1, bhat2, P1, P2, b_fuse, P_fuse, Q = upgrading_model(
+                anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1, P2, gain_norms, log_det_P_trace
+            )
 
-            # Send data to Model_Upgrade
-            log_det_P, gain_norm, bhat1, bhat2, P1, P2 = upgrading_model(anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1, P2, gain_norms)
-
-            ##DONNEES A FEEDBACK
-            feedback_data = { 
+            feedback_data = {
                 "log_det_P": encode_variable(log_det_P),
                 "gain_norm": encode_variable(gain_norm),
                 "bhat1": encode_variable(bhat1),
                 "bhat2": encode_variable(bhat2),
                 "P1": encode_variable(P1),
                 "P2": encode_variable(P2),
+                "b_fuse": encode_variable(b_fuse),
+                "P_fuse": encode_variable(P_fuse),
+                "Q": encode_variable(Q),
             }
             ack_payload = {
                 "id": message_id,
@@ -172,7 +159,7 @@ def kalman_fuse_update_adaptive(b_pred, P_pred, z, R, gain_norm_history, regular
 
     return b_new, P_new, K, log_det_P
 
-def upgrading_model(anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1, P2, gain_norms):
+def upgrading_model(anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1, P2, gain_norms, log_det_P_trace):
 
     'HERE'
     'Send data to Model_Upgrade : anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1, P2, gain_norms'
@@ -188,7 +175,7 @@ def upgrading_model(anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1,
 
         gain_norm = np.linalg.norm(K, ord='fro')
         Q = gain_norm * np.eye(P_pred.shape[0])
-        gain_norms.append(gain_norm)
+        ###gain_norms.append(gain_norm)
 
         # Store determinant of covariance
         #det_P_trace.append(np.linalg.det(P_pred))
@@ -212,7 +199,7 @@ def upgrading_model(anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1,
 
         gain_norm = np.linalg.norm(K, ord='fro')
         Q = gain_norm * np.eye(P_pred.shape[0])
-        gain_norms.append(gain_norm)
+        ###gain_norms.append(gain_norm)
 
         # Store determinant of covariance
         #det_P_trace.append(np.linalg.det(P_pred))
@@ -226,7 +213,7 @@ def upgrading_model(anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1,
         P1 = np.copy(P_fuse)
         P2 = np.copy(P_fuse)
 
-    return log_det_P, gain_norm, bhat1, bhat2, P1, P2
+    return log_det_P, gain_norm, bhat1, bhat2, P1, P2, b_fuse, P_fuse, Q
 
 client = mqtt.Client()
 client.on_connect = on_connect
