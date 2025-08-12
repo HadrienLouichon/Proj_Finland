@@ -246,8 +246,6 @@ def compute_metrics(y_true, y_pred, valid_idx):
 def run_simulation(x_train, y_train, x_test, y_test, R, y_R, uav1_rows, uav2_rows,anom_threshold_b,anom_threshold_u, client):
     
     global feedback_vars
-    log_det_P = None
-    gain_norm = None
     
     H_train, W_train, bands = x_train.shape
     H_test, W_test, _ = x_test.shape
@@ -257,6 +255,7 @@ def run_simulation(x_train, y_train, x_test, y_test, R, y_R, uav1_rows, uav2_row
 
     gain_norms = []
     log_det_P_trace = []
+    det_P_trace = []
 
 
     train_res = np.zeros((H_train,W_train))
@@ -372,13 +371,13 @@ def run_simulation(x_train, y_train, x_test, y_test, R, y_R, uav1_rows, uav2_row
         #'Send data to Model_Upgrade : anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1, P2, gain_norms'
         #'Receive : log_det_P, gain_norm, bhat1, bhat2, P1, P2'
         #to_send = [anomscore1.copy(), anomscore2.copy(), b_fuse.copy(), P_fuse.copy(), Q.copy(), bhat1.copy(), bhat2.copy(), P1.copy(), P2.copy(), gain_norms.copy(), log_det_P_trace.copy()]
-        to_send = [anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1, P2, gain_norms, log_det_P_trace]
+        to_send = [anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1, P2, gain_norms, log_det_P_trace, det_P_trace]
         Send = send_variables(to_send, client)
         if Send:
             fb = attendre_feedback(timeout=5)
             if fb: 
-                log_det_P = np.float64(fb.get("log_det_P", log_det_P))
-                gain_norm = np.float64(fb.get("gain_norm", gain_norm))
+                log_det_P_trace = list(fb.get("log_det_P_trace", log_det_P_trace))
+                gain_norms = list(fb.get("gain_norms", gain_norms))
                 bhat1 = np.array(fb.get("bhat1", bhat1))
                 bhat2 = np.array(fb.get("bhat2", bhat2))
                 P1 = np.array(fb.get("P1", P1))
@@ -386,11 +385,9 @@ def run_simulation(x_train, y_train, x_test, y_test, R, y_R, uav1_rows, uav2_row
                 b_fuse = np.array(fb.get("b_fuse", b_fuse))
                 P_fuse = np.array(fb.get("P_fuse", P_fuse))
                 Q = np.array(fb.get("Q", Q))
+                det_P_trace = list(fb.get("det_P_trace", det_P_trace))
         else:
             print("[MAIN] Aucun feedback reçu, on continue avec les anciens modèles.")
-
-        log_det_P_trace.append(log_det_P)
-        gain_norms.append(gain_norm)
         
         models['base'].append(b_fuse)
 
@@ -456,14 +453,14 @@ def run_simulation(x_train, y_train, x_test, y_test, R, y_R, uav1_rows, uav2_row
 
     # Determinant of Kalman covariance
     plt.figure(figsize=(10, 4))
-    plt.plot(log_det_P_trace)
+    plt.plot(det_P_trace)
     plt.title("Determinant of Kalman covariance matrix P over time")
     plt.xlabel("Update step")
     plt.ylabel("det(P)")
     plt.grid(True)
     plt.tight_layout()
     plt.show()
-    print(log_det_P_trace, gain_norms)
+    print(det_P_trace)
     return metrics, test_results, train_res, models
 
 def main():
