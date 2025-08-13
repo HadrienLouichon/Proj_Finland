@@ -6,32 +6,52 @@ import json
 import os
 from io import BytesIO
 
-MQTT_BROKER = "localhost"  # Adresse du broker
+### Broker MQTT Configuration, change the following variable with the IP Adress of the Raspberry / PC containing the Machine Learning Algorithm.
+MQTT_BROKER = "localhost"  # <--- TO CHANGE
 MQTT_PORT = 1883
 USE_TLS = False
 
 TOPIC_Data = "pi/data"
-TOPIC_ACK = "pc/ack"     # Topic pour envoyer le feedback
+TOPIC_ACK = "pc/ack"
 
-buffers = {}  # Buffer pour reconstruire les chunks
+buffers = {}
 received_vars = {}
 
-#------MQTT-------#
+#------MQTT Functions-------#
 
 def decode_variable(b64_str):
+    '''
+    This function decode all type of variable of base64 type.
+    Input : Variable(s) to decode.
+    Output : Decoded variable(s).
+    '''
     buf = BytesIO(base64.b64decode(b64_str))
     return np.load(buf, allow_pickle=True)
 
 def encode_variable(var):
+    '''
+    This function encode all type of variable in base64.
+    Input : Variable(s) to encode.
+    Output : Encoded variable(s) in base64.
+    '''
     buf = BytesIO()
     np.save(buf, var)
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 def on_connect(client, userdata, flags, rc):
+    '''
+    This function subscribe to the main topic to receive the data from the transmitter.
+    '''
     print("[RECEIVER] Connected, waiting for data ...")
     client.subscribe(TOPIC_Data)
 
 def on_message(client, userdata, msg):
+    '''
+    This function is called when a message is received from the MQTT broker. It decodes the message and reconstruct any potential chunks,
+    and sends a feedback to the sender.
+    Input : MQTT Client, Userdata, Message.
+    Output : None.
+    '''
     try:
         payload = json.loads(msg.payload.decode("utf-8"))
         message_id = payload["message_id"]
@@ -43,15 +63,14 @@ def on_message(client, userdata, msg):
             buffers[message_id] = {"chunks": {}, "total": total_chunks}
 
         buffers[message_id]["chunks"][chunk_id] = data
-        print(f"[RECEIVER] Chunk {chunk_id+1}/{total_chunks} received.")
 
-        # Reconstruction
+        # Reconstruction of the chunks.
         if len(buffers[message_id]["chunks"]) == total_chunks:
             full_data = b"".join(buffers[message_id]["chunks"][i] for i in range(total_chunks))
             del buffers[message_id]
-
             vars_payload = json.loads(full_data.decode("utf-8"))
-            # Récupération explicite dans l'ordre attendu
+
+            ## Received data from the transmitter : anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1, P2, gain_norms, log_det_P_trace, det_P_trace.
             anomscore1 = np.array(decode_variable(vars_payload["var1"]))
             anomscore2 = np.array(decode_variable(vars_payload["var2"]))
             b_fuse     = np.array(decode_variable(vars_payload["var3"]))
@@ -64,11 +83,13 @@ def on_message(client, userdata, msg):
             gain_norms = list(decode_variable(vars_payload["var10"]))
             log_det_P_trace = list(decode_variable(vars_payload["var11"]))
             det_P_trace = list(decode_variable(vars_payload["var12"]))
-
+            
+            ## Upgrade the model using the Kalman Filter with the received variables.
             log_det_P_trace, gain_norms, bhat1, bhat2, P1, P2, b_fuse, P_fuse, Q, det_P_trace = upgrading_model(
                 anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1, P2, gain_norms, log_det_P_trace, det_P_trace
             )
 
+            ## Send feedback with the updated variables : log_det_P, gain_norm, bhat1, bhat2, P1, P2, b_fuse, P_fuse, Q, det_P_trace.
             feedback_data = {
                 "log_det_P_trace": encode_variable(log_det_P_trace),
                 "gain_norms": encode_variable(gain_norms),
@@ -83,19 +104,19 @@ def on_message(client, userdata, msg):
             }
             ack_payload = {
                 "id": message_id,
-                "status": "Reception ✅ + Variables stored",
+                "status": "Latest variables well received and stored.",
                 "extra_data": feedback_data
             }
             client.publish(TOPIC_ACK, json.dumps(ack_payload))
-            print("[RECEIVER] 📤 Feedback sent with extra variables.")
 
     except Exception as e:
-        print("[RECEIVER] ❌ Error:", str(e))
+        print("Error:", str(e))
         client.publish(TOPIC_ACK, json.dumps({
             "id": payload.get("message_id", "unknown"),
-            "status": f"Error ❌ : {str(e)}"
+            "status": f"Error : {str(e)}"
         }))
-#------IMAGE-------#
+
+#------Kalman Filter Algorithm-------#
 
 def kalman_fuse_predict(b_fuse, P_fuse, Q):
     # Prediction step
@@ -162,11 +183,11 @@ def kalman_fuse_update_adaptive(b_pred, P_pred, z, R, gain_norm_history, regular
     return b_new, P_new, K, log_det_P
 
 def upgrading_model(anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1, P2, gain_norms, log_det_P_trace, det_P_trace):
-
-    'HERE'
-    'Send data to Model_Upgrade : anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1, P2, gain_norms'
-    'Receive : log_det_P, gain_norm, bhat1, bhat2, P1, P2'
-    
+    '''
+    This function updates the model using the updated data from the MQTT Broker, and returns the updated variables.
+    Input : anomscore1 (array), anomscore2 (array), b_fuse (array), P_fuse (array), Q (array), bhat1 (array), bhat2 (array), P1 (array), P2 (array), gain_norms (list), log_det_P_trace (list), det_P_trace (list)
+    Output : log_det_P_trace (list), gain_norms (list), bhat1 (array), bhat2 (array), P1 (array), P2 (array), b_fuse (array), P_fuse (array), Q (array), det_P_trace (list)
+    '''
     # Update with UAV1 model
     if any(anomscore1):
         b_pred, P_pred = kalman_fuse_predict(b_fuse, P_fuse, Q)
@@ -216,6 +237,8 @@ def upgrading_model(anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1,
         P2 = np.copy(P_fuse)
 
     return log_det_P_trace, gain_norms, bhat1, bhat2, P1, P2, b_fuse, P_fuse, Q, det_P_trace
+
+### MQTT Client Setup
 
 client = mqtt.Client()
 client.on_connect = on_connect

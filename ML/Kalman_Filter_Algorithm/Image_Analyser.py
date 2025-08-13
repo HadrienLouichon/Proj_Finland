@@ -12,50 +12,73 @@ import json
 from io import BytesIO
 import threading
 
-MQTT_BROKER = "localhost" ##<-- TO CHANGE
+### Broker MQTT Configuration, change the following variable with the IP Adress of the Server / PC containing the Kalman Filter Algorithm.
+MQTT_BROKER = "localhost" # <--- TO CHANGE
 MQTT_PORT = 1883
 USE_TLS = False
 
 TOPIC_Data = "pi/data"
 TOPIC_ACK = "pc/ack"
 
-CHUNK_SIZE = 10_000_000  # 10 Mo
+CHUNK_SIZE = 10_000_000  # Size of the chunks sent over MQTT, in bytes
 
 ack_recu = False
 message_id_en_cours = ""
 feedback_vars = {}
 lock = threading.Lock()
 
-#------MQTT-------#
+#------MQTT Functions-------#
 
 def on_message(client, userdata, msg):
+    '''
+    This function is called when a message is received from the MQTT broker. It decodes the message, checks if it is an acknowledgment for the
+    current message ID, and stores the feedback variables into a global variable "feedback_vars".
+    Input : MQTT Client, Userdata, Message.
+    Output : None.
+    '''
     global ack_recu, feedback_vars
     ack = json.loads(msg.payload.decode('utf-8'))
+
     if ack.get("id") == message_id_en_cours:
         with lock:
             ack_recu = True
-            print(f"[RECEIVER] '{ack.get('status')}' → variables bien reçues.")
             if "extra_data" in ack:
                 decoded_fb = {}
                 for k, v in ack["extra_data"].items():
-                    # On détecte si c'est un tableau NumPy
                     try:
                         decoded_fb[k] = decode_variable(v)
                     except Exception:
                         decoded_fb[k] = decode_variable(v)
-                feedback_vars = decoded_fb  # Remplace entièrement
+                feedback_vars = decoded_fb
+    return
 
 def encode_variable(var):
+    '''
+    This function encode all type of variable in base64.
+    Input : Variable(s) to encode.
+    Output : Encoded variable(s) in base64.
+    '''
     buf = BytesIO()
     np.save(buf, var)
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 def decode_variable(b64_str):
+    '''
+    This function decode all type of variable of base64 type.
+    Input : Variable(s) to decode.
+    Output : Decoded variable(s).
+    '''
     buf = BytesIO(base64.b64decode(b64_str))
     return np.load(buf, allow_pickle=True)
 
 def send_variables(variables, client):
+    '''
+    This function sends variables to the MQTT broker, in chunks, to allow transfer of large data, and waits for the feedback.
+    Input : Variables to send, MQTT Client.
+    Output : Boolean (True if a feedback had been received, False otherwise).
+    '''
     global message_id_en_cours, ack_recu
+
     with lock:
         ack_recu = False
     message_id = str(uuid.uuid4())
@@ -65,7 +88,7 @@ def send_variables(variables, client):
     data_bytes = json.dumps(vars_payload).encode("utf-8")
     total_chunks = (len(data_bytes) + CHUNK_SIZE - 1) // CHUNK_SIZE
 
-    print(f"\n📤 Envoi de {len(variables)} variables ({len(data_bytes)} octets) en {total_chunks} chunk(s)...")
+    print(f"\n📤 {len(variables)} variables ({len(data_bytes)} octets) sent in {total_chunks} chunk(s)...")
 
     for i in range(total_chunks):
         chunk = data_bytes[i * CHUNK_SIZE: (i + 1) * CHUNK_SIZE]
@@ -78,30 +101,29 @@ def send_variables(variables, client):
         client.publish(TOPIC_Data, json.dumps(payload))
         time.sleep(0.05)
 
-    # Attendre l'ACK complet
-    print("[TRANSMITTER] En attente de l'ACK complet...")
-    timeout = time.time() + 5  # 5 secondes max
+    timeout = time.time() + 5
     while True:
         with lock:
             if ack_recu:
-                print("[TRANSMITTER] ✅ ACK reçu.")
                 return True
         if time.time() > timeout:
-            print("[TRANSMITTER] ❌ Timeout en attente de l'ACK.")
+            print("[TRANSMITTER] ❌ No feedback received.")
             return False
         time.sleep(0.1)
 
-def attendre_feedback(timeout=5):
-    """Attend que ack_recu soit True et que feedback_vars contienne des données."""
+def wait_feedback(timeout=5):
+    '''
+    This function wait for the feedback, so that the program can't continue without the latest data.
+    '''
     deadline = time.time() + timeout
     while time.time() < deadline:
         with lock:
             if ack_recu and feedback_vars:
-                return dict(feedback_vars)  # retourne une copie
+                return dict(feedback_vars)
         time.sleep(0.05)
     return None
 
-#------IMAGE-------#
+#------Minimal Machine Learning Algorithms-------#
 
 def select_random_subset(x_train, y_train, n_samples, random_seed=None):
     """
@@ -367,14 +389,15 @@ def run_simulation(x_train, y_train, x_test, y_test, R, y_R, uav1_rows, uav2_row
 
 
 
-        #'HERE'
-        #'Send data to Model_Upgrade : anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1, P2, gain_norms'
-        #'Receive : log_det_P, gain_norm, bhat1, bhat2, P1, P2'
-        #to_send = [anomscore1.copy(), anomscore2.copy(), b_fuse.copy(), P_fuse.copy(), Q.copy(), bhat1.copy(), bhat2.copy(), P1.copy(), P2.copy(), gain_norms.copy(), log_det_P_trace.copy()]
+        ### MQTT Communication :
+        
+        ## Data sent to the Raspberry / PC : anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1, P2, gain_norms, log_det_P_trace, det_P_trace.
         to_send = [anomscore1, anomscore2, b_fuse, P_fuse, Q, bhat1, bhat2, P1, P2, gain_norms, log_det_P_trace, det_P_trace]
         Send = send_variables(to_send, client)
+
+        ## Receive : log_det_P, gain_norm, bhat1, bhat2, P1, P2, b_fuse, P_fuse, Q, det_P_trace.
         if Send:
-            fb = attendre_feedback(timeout=5)
+            fb = wait_feedback(timeout=5)
             if fb: 
                 log_det_P_trace = list(fb.get("log_det_P_trace", log_det_P_trace))
                 gain_norms = list(fb.get("gain_norms", gain_norms))
@@ -387,7 +410,7 @@ def run_simulation(x_train, y_train, x_test, y_test, R, y_R, uav1_rows, uav2_row
                 Q = np.array(fb.get("Q", Q))
                 det_P_trace = list(fb.get("det_P_trace", det_P_trace))
         else:
-            print("[MAIN] Aucun feedback reçu, on continue avec les anciens modèles.")
+            print("Error : No feedback received.")
         
         models['base'].append(b_fuse)
 
@@ -460,11 +483,15 @@ def run_simulation(x_train, y_train, x_test, y_test, R, y_R, uav1_rows, uav2_row
     plt.grid(True)
     plt.tight_layout()
     plt.show()
-    print(det_P_trace)
+
     return metrics, test_results, train_res, models
 
 def main():
+    '''
+    Main function that launches the MQTT client and starts the image analysis. It follows the first blocl of code from 'MLM_federated.ipynb'.
+    '''
 
+    ### Launch MQTT Client and subscribe to the feedback topic.
     client = mqtt.Client()
     client.on_message = on_message
     client.connect(MQTT_BROKER, MQTT_PORT, 60)
@@ -493,7 +520,7 @@ def main():
     # Run simulation
     metrics, test_results, train_res, models= run_simulation(x_train, y_train, x_test, y_test, R, y_R, uav1_rows, uav2_rows, 0.94736842, 1.94736842, client)
 
-    ### NOT NECESSARY -- GRAPHS
+
     plt.figure(figsize=(20,4))
     for i in range(10):
         plt.subplot(2,5,i+1)
@@ -539,9 +566,10 @@ def main():
             
     plt.show()
     time.sleep(2)
+
+
     client.loop_stop()
     client.disconnect()
-    print("[TRANSMITTER] Fin de transmission.")
 
 if __name__ == "__main__":
     main()
