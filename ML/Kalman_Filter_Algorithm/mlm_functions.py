@@ -460,3 +460,83 @@ def run_simulation(x_train, y_train, x_test, y_test, R, y_R, uav1_rows, uav2_row
     plt.show()
 
     return metrics, test_results, train_res, models
+
+if __name__ == "__main__":
+    x_test = np.load('C:\\Users\\hadri\\Documents\\Projets\\Projet Finlande - Université Jyväskylä\\Proj_Finland\\ML\\Kalman_Filter_Algorithm\\data\\salinas_x_test.npy')
+    x_train = np.load('C:\\Users\\hadri\\Documents\\Projets\\Projet Finlande - Université Jyväskylä\\Proj_Finland\\ML\\Kalman_Filter_Algorithm\\data\\salinas_x_train.npy')
+    y_test = np.load('C:\\Users\\hadri\\Documents\\Projets\\Projet Finlande - Université Jyväskylä\\Proj_Finland\\ML\\Kalman_Filter_Algorithm\\data\\salinas_y_test.npy')
+    y_train = np.load('C:\\Users\\hadri\\Documents\\Projets\\Projet Finlande - Université Jyväskylä\\Proj_Finland\\ML\\Kalman_Filter_Algorithm\\data\\salinas_y_train.npy')
+
+
+    ##from scipy.io import loadmat
+    ##X = loadmat('C:\\Users\\hadri\\Documents\\Projets\\Projet Finlande - Université Jyväskylä\\Proj_Finland\\ML\\Kalman_Filter_Algorithm\\data\\Pavia.mat')
+    ##Y = loadmat('C:\\Users\\hadri\\Documents\\Projets\\Projet Finlande - Université Jyväskylä\\Proj_Finland\\ML\\Kalman_Filter_Algorithm\\data\\Pavia_gt.mat')
+    ##X = np.double(np.array(X['paviaU']))
+    ##Y = np.double(np.array(Y['paviaU_gt']))
+
+    ##x_test = X[::2,:,:]
+    ##x_train = X[1::2,:,:]
+    ##y_test = Y[::2,:]
+    ##y_train = Y[1::2,:]
+
+    labels = np.unique(y_train)
+
+
+    idx=0
+    for l in labels:
+        y_train[y_train==l]=idx
+        y_test[y_test==l]=idx
+        idx +=1
+
+    R, y_R = select_R(x_train, y_train, n_per_class=5, random_seed=10)
+
+
+
+    uav1_rows = x_train[:,0:int(x_train.shape[1]/2),:]
+    uav2_rows = x_train[:,int(x_train.shape[1]/2)::,]
+    metrics, test_results, train_res, models = run_simulation(x_train, y_train, x_test, y_test, R, y_R, uav1_rows, uav2_rows, 0.94736842, 1.94736842)
+    plt.figure(figsize=(20,4))
+    for i in range(10):
+        plt.subplot(2,5,i+1)
+        plt.imshow(test_results['base'][i])
+        plt.title('After row '+str(i))
+    plt.show()
+
+    plt.figure(figsize=(20,4))
+    for i in range(10):
+        plt.subplot(2,5,i+1)
+        plt.imshow(test_results['base'][i]-test_results['base'][i+1])
+        plt.title('Difference between '+str(i) + 'and '+str(i+1))
+    plt.show()
+
+    plt.figure(figsize=(20,4))
+    for i in range(10):
+        plt.subplot(2,5,i+1)
+        plt.imshow((test_results['base'][i]-y_test)*(y_test>0))
+        plt.title('After row '+str(i))
+    plt.show()
+
+    plt.figure(figsize=(20,4))
+    for i in range(10):
+        plt.subplot(2,5,i+1)
+        plt.imshow(test_results['base'][i]*(y_test>0))
+        plt.title('After row '+str(i))
+    plt.show()
+
+
+    plt.imshow(train_res)
+    plt.show()
+
+    plt.imshow((train_res*(y_train>0)-y_train)>0)
+    plt.show()
+
+    mallit = np.zeros((30,30,42))
+    for i in range(42):
+        mallit[:,:,i] = models['base'][i]
+
+    for i in range(30):
+        for j in range(30):
+            plt.plot(mallit[i,j,0::-1]-mallit[i,j,1::],alpha=0.1)
+            
+
+    plt.show()
