@@ -8,18 +8,16 @@ from scipy.ndimage import rotate
 from sklearn.decomposition import PCA
 from sklearn.metrics import accuracy_score, confusion_matrix, euclidean_distances
 from sklearn.model_selection import train_test_split, StratifiedKFold
-from sklearn.preprocessing import LabelEncoder
 from scipy.stats import mode
-from matplotlib.colors import ListedColormap
 from matplotlib.patches import Patch
 from itertools import product
 
 # --- Load Salinas-A data ---
 def load_salinas_A():
-    data = scipy.io.loadmat('ML/SalinasA_corrected.mat')['salinasA_corrected']
+    data = scipy.io.loadmat('/home/palomies/Documents/Proj_Finland/data/SalinasA.mat')['salinasA_corrected']
     #print(data)
     #print("Shape of Salinas-A data:", data.shape)
-    labels = scipy.io.loadmat('ML/SalinasA_gt.mat')['salinasA_gt']
+    labels = scipy.io.loadmat('/home/palomies/Documents/Proj_Finland/data/SalinasA_gt.mat')['salinasA_gt']
     #print(labels)
     #print("Shape of Salinas-A labels:", labels.shape)
     X = data.reshape(-1, data.shape[-1])

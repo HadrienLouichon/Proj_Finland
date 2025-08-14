@@ -5,12 +5,11 @@ import seaborn as sns
 from sklearn.metrics import accuracy_score, confusion_matrix
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
-import seaborn as sns
 
 # --- Load Salinas-A data ---
 def load_salinas_A():
-    data = scipy.io.loadmat('ML/SalinasA_corrected.mat')['salinasA_corrected']
-    labels = scipy.io.loadmat('ML/SalinasA_gt.mat')['salinasA_gt']
+    data = scipy.io.loadmat('/home/palomies/Documents/Proj_Finland/data/SalinasA.mat')['salinasA_corrected']
+    labels = scipy.io.loadmat('/home/palomies/Documents/Proj_Finland/data/SalinasA_gt.mat')['salinasA_gt']
     mask_background = labels > 0
     data[~mask_background], labels[~mask_background] = 0, 0
     return data, labels
