@@ -102,9 +102,9 @@ See if the status 'auto mode' is set with the correct python version !
 
 ## Content Table :
 - [Caracteristics of each branch](#caracteristics-of-each-branch)
-- [Description of the Github depot](#caracteristics-of-each-branch)
+- [Description of the Github depot](#description-of-the-github-depot)
 --------------
-- [Final : Launch Raspberry - Ubuntu Computer with MLM Algorithm](#final-:-launch-raspberry---ubuntu-computer-with-mlm-algorithm)
+- [Launch Raspberry communication with Ubuntu Computer with MLM Algorithm](#launch-raspberry-communication-with-ubuntu-computer-with-mlm-algorithm)
 - [Code description](#code-description)
 ------------------------------------------------------------
 - [Launch a basic local communication to transfer files](#launch-basic-local-communication-branch-send_multiple_documents--send_heavier_data)
@@ -114,7 +114,7 @@ See if the status 'auto mode' is set with the correct python version !
 --------------------
 - [Reset & Reinstalling a RaspberryPi 5](#reset-and-reinstalling-a-raspberrypi-5-from-scratch)
 
-## Caracteristics of each branch :
+## Caracteristics of each branch
 - Branch *main* : Last up to date branch, which will be used for the communication between the RaspberryPi's and the computer.
 - Branch *First_impl_Simple_Local_Transmitter_Receiver* : First functionnal implementation of the Mosquitto MQTT code, transmitting a small data in local.
 - Branch *Send_multiple_documents* : Second functionnal implementation of the MQTT, transmitting multiple documents / data locally.
@@ -124,7 +124,7 @@ See if the status 'auto mode' is set with the correct python version !
 - Branch *Large_communication_with_RaspberryPi* : Allows to send large documents / data between different devices.
 - Branch *Final_step_project* : Communication between Analyser / Server with the MLM & Kalman algorithm.
   
-## Description of the Github depot :
+## Description of the Github depot
 This project is organized in differents parts :
 
 - The *data* folder contains all test data (salinas / pavia) used in the algorithms. The main algorithms focuses on the salinas data (matlab extension), and the image is split in differents parts for training and testing (numpy extension).
@@ -136,7 +136,7 @@ This project is organized in differents parts :
 
 To sum up what you absolutely need to have in order to make it work : One or two devices, one to receive and one to transmit (can be the same if local transmission). They have to be on the same network or to use an online MQTT Broker. Mosquitto has to be running on the receiver's side (if local, on 127.0.0.X, port 1883 as default ; otherwise on 0.0.0.0, port 1883 as default). Both the receiver and the transmitter's algorithms need to have the IP adress and the port of the receiver in the MQTT parameters.
 
-## Final : Launch Raspberry - Ubuntu Computer with MLM Algorithm.
+## Launch Raspberry communication with Ubuntu Computer with MLM Algorithm
 
 For this, you'll need to have mosquitto installed and configured on the Computer that will have to update the MLM model. Check [Requirements](#requirements) if necessary.
 
