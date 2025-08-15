@@ -176,6 +176,7 @@ For this, you'll need to have mosquitto installed and configured on the Computer
      ```
      pip install ipykernel
      pip install numpy
+     pip install paho-mqtt
      ```
 
      II. On the Raspberry(s), open one terminal and go to the *RaspberryPi* folder. You first need to be connected to the same Wifi as the Ubuntu Computer, and you'll need to put its IP Adress in **Image_Analyser.py** file, at the line *MQTT_Broker = ""*.
@@ -183,7 +184,6 @@ For this, you'll need to have mosquitto installed and configured on the Computer
      ```
      python Image_Analyser.py
      ```
-2. Using Jupyter Notebook :
 
 ## Code description :
 
