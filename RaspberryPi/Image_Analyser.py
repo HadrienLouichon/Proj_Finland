@@ -13,7 +13,7 @@ from io import BytesIO
 import threading
 
 ### Broker MQTT Configuration, change the following variable with the IP Adress of the Server / PC containing the Kalman Filter Algorithm.
-MQTT_BROKER = "#IP Adress of the MQTT Host" # <--- TO CHANGE 10.1.63.99
+MQTT_BROKER = "#IP Adress of the MQTT Host" # <--- TO CHANGE
 MQTT_PORT = 1883 # Port used for the MQTT Connexion.
 USE_TLS = False
 

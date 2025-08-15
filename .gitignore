@@ -1,6 +1,7 @@
 Existing_code_Raspberry
 Documents
 ML/__pycache__/
+ML/.ipynb_checkpoints
 MQTT_Broker/venv
 MQTT_Broker/.ipynb_checkpoints
 RaspberryPi/.ipynb_checkpoints
